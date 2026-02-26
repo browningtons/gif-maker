@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.npm-cache/
+.DS_Store
+*.local
+__pycache__/
+*.pyc
+tsconfig.tsbuildinfo
+sample.gif
+sample2.gif
+sample.mp4

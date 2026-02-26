@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Core identity */
+  --ink: #0f172a;
+  --link: #2cb6c0;
+  --accent: #f04a00;
+  --accent2: #0f3d57;
+
+  /* Neutrals */
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --border: #e2e8f0;
+  --muted: #64748b;
+  --surface-2: #f1f5f9;
+
+  /* Teal system */
+  --teal-50: #d8f3f5;
+  --teal-200: #8edbe0;
+  --teal-500: #2cb6c0;
+  --teal-700: #0e7c86;
+
+  /* Orange system */
+  --orange-100: #ffd9c7;
+  --orange-400: #ff7a33;
+  --orange-500: #f04a00;
+  --orange-700: #b53300;
+
+  /* Blue depth */
+  --blue-100: #d6e6f0;
+  --blue-500: #4c6f86;
+  --blue-700: #0f3d57;
+  --blue-900: #082535;
+
+  /* Semantic tokens */
+  --text: var(--ink);
+  --text-muted: var(--muted);
+  --primary: var(--accent);
+  --primary-contrast: #ffffff;
+  --secondary: var(--accent2);
+  --secondary-contrast: #ffffff;
+
+  --focus: color-mix(in srgb, var(--link) 65%, white);
+  --radius: 14px;
+  --shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
+
+  /* Compatibility aliases for existing app styles */
+  --color-bg-primary: var(--bg);
+  --color-bg-secondary: var(--surface);
+  --color-text-main: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-brand-primary: var(--primary);
+  --color-brand-secondary: var(--secondary);
+  --color-brand-accent: var(--link);
+  --color-link: var(--link);
+  --color-link-hover: var(--accent2);
+  --color-border: var(--border);
+  --color-border-subtle: color-mix(in srgb, var(--border) 75%, white);
+  --color-surface-muted: var(--surface-2);
+  --color-text-inverse: #eaf1f5;
+  --color-text-inverse-muted: #c9dde6;
+  --color-chart-grid: color-mix(in srgb, var(--blue-500) 20%, white);
+  --color-chart-axis: var(--blue-500);
+  --color-chart-baseline: color-mix(in srgb, var(--blue-700) 45%, white);
+  --color-zone-weak: var(--orange-500);
+  --color-zone-average: var(--teal-500);
+  --color-zone-fit: var(--blue-700);
+
+  font-family: "Inter", "Avenir Next", "Segoe UI", sans-serif;
+}
+
+[data-theme="dark"] {
+  --bg: #0b1220;
+  --surface: #0f172a;
+  --surface-2: #111c2e;
+  --border: rgba(226, 232, 240, 0.1);
+
+  --text: #e5e7eb;
+  --text-muted: rgba(229, 231, 235, 0.7);
+
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+
+  --color-text-inverse: #f8fafc;
+  --color-text-inverse-muted: #cbd5e1;
+  --color-chart-grid: color-mix(in srgb, #94a3b8 28%, transparent);
+  --color-chart-axis: #b8c2d8;
+  --color-chart-baseline: #64748b;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
