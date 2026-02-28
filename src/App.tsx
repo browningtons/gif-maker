@@ -74,13 +74,6 @@ function estimateGifBytes(params: {
   return pixelFrames * baseBytesPerPixelFrame * colorFactor * ditherFactor * params.bias;
 }
 
-function formatTime(seconds: number) {
-  const s = Math.max(0, seconds);
-  const minutes = Math.floor(s / 60);
-  const remainder = s - minutes * 60;
-  return `${minutes}:${remainder.toFixed(1).padStart(4, '0')}`;
-}
-
 function App() {
   const ffmpegRef = useRef(new FFmpeg());
   const [loaded, setLoaded] = useState(false);
@@ -186,11 +179,6 @@ function App() {
     [durationSec, speed]
   );
 
-  const endSec = useMemo(() => {
-    if (videoDuration <= 0) return startSec + durationSec;
-    return Math.min(videoDuration, startSec + durationSec);
-  }, [durationSec, startSec, videoDuration]);
-
   const outputHeight = useMemo(() => {
     if (videoWidth > 0 && videoHeight > 0) {
       return Math.max(2, Math.round((width * (videoHeight / videoWidth)) / 2) * 2);
@@ -215,20 +203,6 @@ function App() {
   const estimatedMb = estimatedBytes / (1024 * 1024);
   const estimatedMinMb = estimatedMb * 0.65;
   const estimatedMaxMb = estimatedMb * 1.35;
-  const startPct = videoDuration > 0 ? (startSec / videoDuration) * 100 : 0;
-  const endPct = videoDuration > 0 ? (endSec / videoDuration) * 100 : 0;
-
-  const onStartHandleChange = (value: number) => {
-    const currentEnd = videoDuration > 0 ? endSec : startSec + durationSec;
-    const safeStart = Math.min(Math.max(0, value), Math.max(0, currentEnd - MIN_TRIM_DURATION));
-    clampTrim(safeStart, currentEnd - safeStart);
-  };
-
-  const onEndHandleChange = (value: number) => {
-    const maxEnd = videoDuration > 0 ? videoDuration : startSec + Math.max(MIN_TRIM_DURATION, durationSec);
-    const safeEnd = Math.max(startSec + MIN_TRIM_DURATION, Math.min(value, maxEnd));
-    clampTrim(startSec, safeEnd - startSec);
-  };
 
   const loadFFmpeg = async () => {
     if (loaded) return;
@@ -407,6 +381,11 @@ function App() {
 
   const fieldClass =
     'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-2 text-[var(--text)]';
+  const targetSizeModeHelp =
+    'Target size mode runs up to 8 optimization attempts. ' +
+    'After each render, output size is checked against your MB target. ' +
+    'If over target, the next attempt reduces width (~12%), FPS (-1), and colors (step-down) with minimum quality floors. ' +
+    'Processing stops as soon as the file is within target; otherwise the final best-effort result is returned.';
 
   return (
     <main className="min-h-screen p-6 text-[var(--text)] md:p-10">
@@ -440,45 +419,6 @@ function App() {
                   className="block w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3 text-sm text-[var(--text)]"
                 />
                 {file ? <p className="mt-2 text-xs text-[var(--text-muted)]">Loaded: {file.name}</p> : null}
-                {file && videoDuration > 0 ? (
-                  <div className="mt-3 rounded-xl border border-[var(--color-border)] bg-[var(--surface-2)] p-3">
-                    <div className="mb-2 flex items-center justify-between text-xs text-[var(--text-muted)]">
-                      <span className="font-medium text-[var(--secondary)]">Trim timeline</span>
-                      <span>
-                        {formatTime(startSec)} - {formatTime(endSec)} / {formatTime(videoDuration)}
-                      </span>
-                    </div>
-                    <div className="relative h-8">
-                      <div className="absolute top-1/2 h-1 w-full -translate-y-1/2 rounded-full bg-[var(--color-border)]" />
-                      <div
-                        className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-[var(--teal-500)]"
-                        style={{ left: `${startPct}%`, width: `${Math.max(1, endPct - startPct)}%` }}
-                      />
-                      <input
-                        type="range"
-                        min={0}
-                        max={videoDuration}
-                        step={0.01}
-                        value={startSec}
-                        onChange={(e) => onStartHandleChange(Number(e.target.value))}
-                        className="trim-slider"
-                      />
-                      <input
-                        type="range"
-                        min={0}
-                        max={videoDuration}
-                        step={0.01}
-                        value={endSec}
-                        onChange={(e) => onEndHandleChange(Number(e.target.value))}
-                        className="trim-slider"
-                      />
-                    </div>
-                    <div className="mt-1 flex justify-between text-[11px] text-[var(--text-muted)]">
-                      <span>0:00.0</span>
-                      <span>{formatTime(videoDuration)}</span>
-                    </div>
-                  </div>
-                ) : null}
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
@@ -652,7 +592,16 @@ function App() {
                 </div>
 
                 <label className="text-sm sm:col-span-2">
-                  <span className="mb-1 block font-medium text-[var(--secondary)]">Target size mode</span>
+                  <span className="mb-1 flex items-center gap-2 font-medium text-[var(--secondary)]">
+                    Target size mode
+                    <span
+                      className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--surface-2)] text-[11px] font-semibold text-[var(--secondary)]"
+                      title={targetSizeModeHelp}
+                      aria-label={targetSizeModeHelp}
+                    >
+                      i
+                    </span>
+                  </span>
                   <button
                     type="button"
                     onClick={() => setTargetSizeMode((current) => !current)}

@@ -114,36 +114,3 @@ a:hover {
   outline-offset: 2px;
   border-radius: 8px;
 }
-
-.trim-slider {
-  appearance: none;
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  background: transparent;
-  pointer-events: none;
-}
-
-.trim-slider::-webkit-slider-thumb {
-  appearance: none;
-  pointer-events: auto;
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  border: 2px solid var(--surface);
-  background: var(--primary);
-  box-shadow: 0 1px 6px rgba(15, 23, 42, 0.25);
-  cursor: ew-resize;
-}
-
-.trim-slider::-moz-range-thumb {
-  pointer-events: auto;
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  border: 2px solid var(--surface);
-  background: var(--primary);
-  box-shadow: 0 1px 6px rgba(15, 23, 42, 0.25);
-  cursor: ew-resize;
-}
