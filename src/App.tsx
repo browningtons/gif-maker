@@ -3,6 +3,7 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
 type PresetKey = 'ultra' | 'balanced' | 'compact';
+type PlatformKey = 'linkedin' | 'instagram' | 'facebook' | 'custom';
 
 type Settings = {
   fps: number;
@@ -15,6 +16,32 @@ const PRESETS: Record<PresetKey, Settings> = {
   ultra: { fps: 20, width: 1280, colors: 256, dither: 'sierra2_4a' },
   balanced: { fps: 15, width: 960, colors: 256, dither: 'sierra2_4a' },
   compact: { fps: 12, width: 720, colors: 128, dither: 'bayer' }
+};
+
+const PLATFORM_PROFILES: Record<
+  PlatformKey,
+  { label: string; targetMb: number; note: string }
+> = {
+  linkedin: {
+    label: 'LinkedIn post (8 MB target)',
+    targetMb: 8,
+    note: 'Best quality at 8 MB: keep clips short and use moderate width/fps.'
+  },
+  instagram: {
+    label: 'Instagram (prefer MP4; GIF target 8 MB)',
+    targetMb: 8,
+    note: 'Instagram is video-first. GIFs may be converted by tools before upload.'
+  },
+  facebook: {
+    label: 'Facebook (roomier target 12 MB)',
+    targetMb: 12,
+    note: 'Facebook allows larger media, but smaller GIFs still load faster.'
+  },
+  custom: {
+    label: 'Custom target',
+    targetMb: 8,
+    note: 'Set your own output cap in MB.'
+  }
 };
 
 const CORE_BASE = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
@@ -37,10 +64,19 @@ function App() {
   const [status, setStatus] = useState('Load ffmpeg and drop a video to begin.');
   const [gifUrl, setGifUrl] = useState<string | null>(null);
   const [isDark, setIsDark] = useState(false);
+  const [platform, setPlatform] = useState<PlatformKey>('linkedin');
+  const [targetSizeMb, setTargetSizeMb] = useState(PLATFORM_PROFILES.linkedin.targetMb);
+  const [targetSizeMode, setTargetSizeMode] = useState(true);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
   }, [isDark]);
+
+  useEffect(() => {
+    if (platform !== 'custom') {
+      setTargetSizeMb(PLATFORM_PROFILES[platform].targetMb);
+    }
+  }, [platform]);
 
   const gifName = useMemo(() => {
     if (!file) return 'output.gif';
@@ -96,46 +132,99 @@ function App() {
 
       const trimArgs = ['-ss', toFixed(Math.max(0, startSec)), '-t', toFixed(Math.max(0.2, durationSec))];
       const speedFilter = speed === 1 ? '' : `,setpts=PTS/${speed}`;
-      const scaleAndRate = `fps=${fps},scale=${width}:-1:flags=lanczos${speedFilter}`;
+      const targetBytes = Math.max(1, targetSizeMb) * 1024 * 1024;
 
-      setStatus('Generating color palette...');
-      await ffmpeg.exec([
-        '-y',
-        '-i',
-        inputName,
-        ...trimArgs,
-        '-frames:v',
-        '1',
-        '-update',
-        '1',
-        '-vf',
-        `${scaleAndRate},palettegen=max_colors=${Math.max(2, Math.min(256, colors))}:stats_mode=full`,
-        paletteName
-      ]);
+      const renderAttempt = async (
+        attemptWidth: number,
+        attemptFps: number,
+        attemptColors: number,
+        attemptLabel: string
+      ) => {
+        const scaleAndRate = `fps=${attemptFps},scale=${attemptWidth}:-1:flags=lanczos${speedFilter}`;
+        setStatus(attemptLabel);
+        await ffmpeg.exec([
+          '-y',
+          '-i',
+          inputName,
+          ...trimArgs,
+          '-frames:v',
+          '1',
+          '-update',
+          '1',
+          '-vf',
+          `${scaleAndRate},palettegen=max_colors=${attemptColors}:stats_mode=full`,
+          paletteName
+        ]);
+        await ffmpeg.exec([
+          '-y',
+          '-i',
+          inputName,
+          ...trimArgs,
+          '-i',
+          paletteName,
+          '-lavfi',
+          `${scaleAndRate}[x];[x][1:v]paletteuse=dither=${dither}:diff_mode=rectangle`,
+          '-loop',
+          String(loopCount),
+          outputName
+        ]);
+        const data = await ffmpeg.readFile(outputName);
+        const bytes =
+          data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data);
+        return new Blob([bytes], { type: 'image/gif' });
+      };
 
-      setStatus('Rendering GIF...');
-      await ffmpeg.exec([
-        '-y',
-        '-i',
-        inputName,
-        ...trimArgs,
-        '-i',
-        paletteName,
-        '-lavfi',
-        `${scaleAndRate}[x];[x][1:v]paletteuse=dither=${dither}:diff_mode=rectangle`,
-        '-loop',
-        String(loopCount),
-        outputName
-      ]);
+      let finalBlob: Blob | null = null;
+      let hitTarget = false;
 
-      const data = await ffmpeg.readFile(outputName);
-      const bytes =
-        data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data);
-      const blob = new Blob([bytes], { type: 'image/gif' });
+      if (targetSizeMode) {
+        let attemptWidth = Math.max(320, Math.round(width / 2) * 2);
+        let attemptFps = Math.max(6, fps);
+        let attemptColors = Math.max(32, Math.min(256, colors));
+        const maxAttempts = 8;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+          finalBlob = await renderAttempt(
+            attemptWidth,
+            attemptFps,
+            attemptColors,
+            `Generating attempt ${attempt}/${maxAttempts} for <= ${targetSizeMb} MB...`
+          );
+
+          if (finalBlob.size <= targetBytes) {
+            hitTarget = true;
+            break;
+          }
+
+          attemptWidth = Math.max(320, Math.floor((attemptWidth * 0.88) / 2) * 2);
+          attemptFps = Math.max(6, attemptFps - 1);
+          attemptColors = Math.max(48, attemptColors - (attempt < 3 ? 16 : 8));
+        }
+      } else {
+        finalBlob = await renderAttempt(
+          Math.max(320, Math.round(width / 2) * 2),
+          Math.max(6, fps),
+          Math.max(32, Math.min(256, colors)),
+          'Generating GIF with current settings...'
+        );
+      }
+
+      if (!finalBlob) {
+        throw new Error('No GIF output generated');
+      }
+
       if (gifUrl) URL.revokeObjectURL(gifUrl);
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(finalBlob);
       setGifUrl(url);
-      setStatus(`Done. GIF size ${(blob.size / (1024 * 1024)).toFixed(2)} MB`);
+      if (!targetSizeMode) {
+        setStatus(`Done. GIF size ${(finalBlob.size / (1024 * 1024)).toFixed(2)} MB.`);
+      } else if (hitTarget) {
+        setStatus(`Done. GIF size ${(finalBlob.size / (1024 * 1024)).toFixed(2)} MB (within target).`);
+      } else {
+        setStatus(
+          `Done. Best effort ${(finalBlob.size / (1024 * 1024)).toFixed(2)} MB; lower duration/width for <= ${targetSizeMb} MB.`
+        );
+      }
 
       await ffmpeg.deleteFile(inputName);
       await ffmpeg.deleteFile(paletteName);
@@ -227,6 +316,38 @@ function App() {
                 </label>
 
                 <label className="text-sm">
+                  <span className="mb-1 block font-medium text-[var(--secondary)]">Platform target</span>
+                  <select
+                    value={platform}
+                    onChange={(e) => setPlatform(e.target.value as PlatformKey)}
+                    className={fieldClass}
+                    disabled={!targetSizeMode}
+                  >
+                    <option value="linkedin">{PLATFORM_PROFILES.linkedin.label}</option>
+                    <option value="instagram">{PLATFORM_PROFILES.instagram.label}</option>
+                    <option value="facebook">{PLATFORM_PROFILES.facebook.label}</option>
+                    <option value="custom">{PLATFORM_PROFILES.custom.label}</option>
+                  </select>
+                </label>
+
+                <label className="text-sm">
+                  <span className="mb-1 block font-medium text-[var(--secondary)]">Target size (MB)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    step={0.5}
+                    value={targetSizeMb}
+                    onChange={(e) => {
+                      setPlatform('custom');
+                      setTargetSizeMb(Number(e.target.value));
+                    }}
+                    className={fieldClass}
+                    disabled={!targetSizeMode}
+                  />
+                </label>
+
+                <label className="text-sm">
                   <span className="mb-1 block font-medium text-[var(--secondary)]">Width (px)</span>
                   <input
                     type="number"
@@ -297,6 +418,23 @@ function App() {
                     onChange={(e) => setLoopCount(Number(e.target.value))}
                     className={fieldClass}
                   />
+                </label>
+
+                <p className="text-xs text-[var(--text-muted)] sm:col-span-2">
+                  {targetSizeMode
+                    ? PLATFORM_PROFILES[platform].note
+                    : 'Target size mode is off. Output uses your exact settings in a single pass.'}
+                </p>
+
+                <label className="text-sm sm:col-span-2">
+                  <span className="mb-1 block font-medium text-[var(--secondary)]">Target size mode</span>
+                  <button
+                    type="button"
+                    onClick={() => setTargetSizeMode((current) => !current)}
+                    className="rounded-xl border border-[var(--color-border)] bg-[var(--surface-2)] px-3 py-2 text-sm font-semibold text-[var(--secondary)]"
+                  >
+                    {targetSizeMode ? `On (aim for <= ${targetSizeMb} MB)` : 'Off (single pass quality)'}
+                  </button>
                 </label>
               </div>
 
