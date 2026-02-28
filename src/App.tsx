@@ -23,9 +23,9 @@ const PLATFORM_PROFILES: Record<
   { label: string; targetMb: number; note: string }
 > = {
   linkedin: {
-    label: 'LinkedIn post (8 MB target)',
-    targetMb: 8,
-    note: 'Best quality at 8 MB: keep clips short and use moderate width/fps.'
+    label: 'LinkedIn post (7 MB limit)',
+    targetMb: 7,
+    note: 'Set to the assumed LinkedIn upper limit of 7 MB.'
   },
   instagram: {
     label: 'Instagram (prefer MP4; GIF target 8 MB)',
