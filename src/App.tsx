@@ -12,6 +12,8 @@ type Settings = {
   dither: 'none' | 'bayer' | 'floyd_steinberg' | 'sierra2' | 'sierra2_4a';
 };
 
+type DitherKey = Settings['dither'];
+
 const PRESETS: Record<PresetKey, Settings> = {
   ultra: { fps: 20, width: 1280, colors: 256, dither: 'sierra2_4a' },
   balanced: { fps: 15, width: 960, colors: 256, dither: 'sierra2_4a' },
@@ -45,6 +47,39 @@ const PLATFORM_PROFILES: Record<
 };
 
 const CORE_BASE = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+const MIN_TRIM_DURATION = 0.2;
+
+const DITHER_FACTORS: Record<DitherKey, number> = {
+  none: 0.85,
+  bayer: 1.0,
+  floyd_steinberg: 1.08,
+  sierra2: 1.1,
+  sierra2_4a: 1.12
+};
+
+function estimateGifBytes(params: {
+  width: number;
+  height: number;
+  fps: number;
+  durationSec: number;
+  colors: number;
+  dither: DitherKey;
+  bias: number;
+}) {
+  const baseBytesPerPixelFrame = 0.055;
+  const colorFactor = 0.75 + (Math.max(2, Math.min(256, params.colors)) / 256) * 0.5;
+  const ditherFactor = DITHER_FACTORS[params.dither];
+  const frames = Math.max(1, params.fps * params.durationSec);
+  const pixelFrames = Math.max(1, params.width * params.height * frames);
+  return pixelFrames * baseBytesPerPixelFrame * colorFactor * ditherFactor * params.bias;
+}
+
+function formatTime(seconds: number) {
+  const s = Math.max(0, seconds);
+  const minutes = Math.floor(s / 60);
+  const remainder = s - minutes * 60;
+  return `${minutes}:${remainder.toFixed(1).padStart(4, '0')}`;
+}
 
 function App() {
   const ffmpegRef = useRef(new FFmpeg());
@@ -67,6 +102,10 @@ function App() {
   const [platform, setPlatform] = useState<PlatformKey>('linkedin');
   const [targetSizeMb, setTargetSizeMb] = useState(PLATFORM_PROFILES.linkedin.targetMb);
   const [targetSizeMode, setTargetSizeMode] = useState(true);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [videoWidth, setVideoWidth] = useState(0);
+  const [videoHeight, setVideoHeight] = useState(0);
+  const [estimateBias, setEstimateBias] = useState(1);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
@@ -77,6 +116,40 @@ function App() {
       setTargetSizeMb(PLATFORM_PROFILES[platform].targetMb);
     }
   }, [platform]);
+
+  useEffect(() => {
+    if (!file) {
+      setVideoDuration(0);
+      setVideoWidth(0);
+      setVideoHeight(0);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+
+    const probe = document.createElement('video');
+    probe.preload = 'metadata';
+    probe.src = objectUrl;
+
+    const onLoadedMetadata = () => {
+      const duration = Number.isFinite(probe.duration) && probe.duration > 0 ? probe.duration : 0;
+      const sourceWidth = probe.videoWidth || 0;
+      const sourceHeight = probe.videoHeight || 0;
+      setVideoDuration(duration);
+      setVideoWidth(sourceWidth);
+      setVideoHeight(sourceHeight);
+      setStartSec(0);
+      setDurationSec(duration > 0 ? Math.min(5, Math.max(MIN_TRIM_DURATION, duration)) : 5);
+    };
+
+    probe.addEventListener('loadedmetadata', onLoadedMetadata);
+    probe.load();
+
+    return () => {
+      probe.removeEventListener('loadedmetadata', onLoadedMetadata);
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [file]);
 
   const gifName = useMemo(() => {
     if (!file) return 'output.gif';
@@ -90,6 +163,71 @@ function App() {
     setWidth(PRESETS[next].width);
     setColors(PRESETS[next].colors);
     setDither(PRESETS[next].dither);
+  };
+
+  const clampTrim = (nextStart: number, nextDuration: number) => {
+    if (videoDuration <= 0) {
+      setStartSec(Math.max(0, nextStart));
+      setDurationSec(Math.max(MIN_TRIM_DURATION, nextDuration));
+      return;
+    }
+
+    const maxStart = Math.max(0, videoDuration - MIN_TRIM_DURATION);
+    const safeStart = Math.min(Math.max(0, nextStart), maxStart);
+    const maxDuration = Math.max(MIN_TRIM_DURATION, videoDuration - safeStart);
+    const safeDuration = Math.min(Math.max(MIN_TRIM_DURATION, nextDuration), maxDuration);
+
+    setStartSec(Number(safeStart.toFixed(2)));
+    setDurationSec(Number(safeDuration.toFixed(2)));
+  };
+
+  const effectiveDuration = useMemo(
+    () => Math.max(MIN_TRIM_DURATION, durationSec) / Math.max(0.25, speed),
+    [durationSec, speed]
+  );
+
+  const endSec = useMemo(() => {
+    if (videoDuration <= 0) return startSec + durationSec;
+    return Math.min(videoDuration, startSec + durationSec);
+  }, [durationSec, startSec, videoDuration]);
+
+  const outputHeight = useMemo(() => {
+    if (videoWidth > 0 && videoHeight > 0) {
+      return Math.max(2, Math.round((width * (videoHeight / videoWidth)) / 2) * 2);
+    }
+    return Math.max(2, Math.round((width * 9 / 16) / 2) * 2);
+  }, [videoHeight, videoWidth, width]);
+
+  const estimatedBytes = useMemo(
+    () =>
+      estimateGifBytes({
+        width: Math.max(120, width),
+        height: outputHeight,
+        fps: Math.max(1, fps),
+        durationSec: effectiveDuration,
+        colors,
+        dither,
+        bias: estimateBias
+      }),
+    [colors, dither, effectiveDuration, estimateBias, fps, outputHeight, width]
+  );
+
+  const estimatedMb = estimatedBytes / (1024 * 1024);
+  const estimatedMinMb = estimatedMb * 0.65;
+  const estimatedMaxMb = estimatedMb * 1.35;
+  const startPct = videoDuration > 0 ? (startSec / videoDuration) * 100 : 0;
+  const endPct = videoDuration > 0 ? (endSec / videoDuration) * 100 : 0;
+
+  const onStartHandleChange = (value: number) => {
+    const currentEnd = videoDuration > 0 ? endSec : startSec + durationSec;
+    const safeStart = Math.min(Math.max(0, value), Math.max(0, currentEnd - MIN_TRIM_DURATION));
+    clampTrim(safeStart, currentEnd - safeStart);
+  };
+
+  const onEndHandleChange = (value: number) => {
+    const maxEnd = videoDuration > 0 ? videoDuration : startSec + Math.max(MIN_TRIM_DURATION, durationSec);
+    const safeEnd = Math.max(startSec + MIN_TRIM_DURATION, Math.min(value, maxEnd));
+    clampTrim(startSec, safeEnd - startSec);
   };
 
   const loadFFmpeg = async () => {
@@ -130,9 +268,15 @@ function App() {
 
       await ffmpeg.writeFile(inputName, await fetchFile(file));
 
-      const trimArgs = ['-ss', toFixed(Math.max(0, startSec)), '-t', toFixed(Math.max(0.2, durationSec))];
+      const trimArgs = ['-ss', toFixed(Math.max(0, startSec)), '-t', toFixed(Math.max(MIN_TRIM_DURATION, durationSec))];
       const speedFilter = speed === 1 ? '' : `,setpts=PTS/${speed}`;
       const targetBytes = Math.max(1, targetSizeMb) * 1024 * 1024;
+      const estimateHeightForWidth = (candidateWidth: number) => {
+        if (videoWidth > 0 && videoHeight > 0) {
+          return Math.max(2, Math.round((candidateWidth * (videoHeight / videoWidth)) / 2) * 2);
+        }
+        return Math.max(2, Math.round((candidateWidth * 9 / 16) / 2) * 2);
+      };
 
       const renderAttempt = async (
         attemptWidth: number,
@@ -176,6 +320,9 @@ function App() {
 
       let finalBlob: Blob | null = null;
       let hitTarget = false;
+      let finalWidth = Math.max(320, Math.round(width / 2) * 2);
+      let finalFps = Math.max(6, fps);
+      let finalColors = Math.max(32, Math.min(256, colors));
 
       if (targetSizeMode) {
         let attemptWidth = Math.max(320, Math.round(width / 2) * 2);
@@ -184,6 +331,9 @@ function App() {
         const maxAttempts = 8;
 
         for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+          finalWidth = attemptWidth;
+          finalFps = attemptFps;
+          finalColors = attemptColors;
           finalBlob = await renderAttempt(
             attemptWidth,
             attemptFps,
@@ -201,10 +351,13 @@ function App() {
           attemptColors = Math.max(48, attemptColors - (attempt < 3 ? 16 : 8));
         }
       } else {
+        finalWidth = Math.max(320, Math.round(width / 2) * 2);
+        finalFps = Math.max(6, fps);
+        finalColors = Math.max(32, Math.min(256, colors));
         finalBlob = await renderAttempt(
-          Math.max(320, Math.round(width / 2) * 2),
-          Math.max(6, fps),
-          Math.max(32, Math.min(256, colors)),
+          finalWidth,
+          finalFps,
+          finalColors,
           'Generating GIF with current settings...'
         );
       }
@@ -216,6 +369,21 @@ function App() {
       if (gifUrl) URL.revokeObjectURL(gifUrl);
       const url = URL.createObjectURL(finalBlob);
       setGifUrl(url);
+
+      const predictedBytes = estimateGifBytes({
+        width: finalWidth,
+        height: estimateHeightForWidth(finalWidth),
+        fps: finalFps,
+        durationSec: Math.max(MIN_TRIM_DURATION, durationSec) / Math.max(0.25, speed),
+        colors: finalColors,
+        dither,
+        bias: 1
+      });
+      if (predictedBytes > 0) {
+        const measuredBias = Math.min(3, Math.max(0.35, finalBlob.size / predictedBytes));
+        setEstimateBias((prev) => Number(((prev * 0.6) + (measuredBias * 0.4)).toFixed(4)));
+      }
+
       if (!targetSizeMode) {
         setStatus(`Done. GIF size ${(finalBlob.size / (1024 * 1024)).toFixed(2)} MB.`);
       } else if (hitTarget) {
@@ -272,6 +440,45 @@ function App() {
                   className="block w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3 text-sm text-[var(--text)]"
                 />
                 {file ? <p className="mt-2 text-xs text-[var(--text-muted)]">Loaded: {file.name}</p> : null}
+                {file && videoDuration > 0 ? (
+                  <div className="mt-3 rounded-xl border border-[var(--color-border)] bg-[var(--surface-2)] p-3">
+                    <div className="mb-2 flex items-center justify-between text-xs text-[var(--text-muted)]">
+                      <span className="font-medium text-[var(--secondary)]">Trim timeline</span>
+                      <span>
+                        {formatTime(startSec)} - {formatTime(endSec)} / {formatTime(videoDuration)}
+                      </span>
+                    </div>
+                    <div className="relative h-8">
+                      <div className="absolute top-1/2 h-1 w-full -translate-y-1/2 rounded-full bg-[var(--color-border)]" />
+                      <div
+                        className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-[var(--teal-500)]"
+                        style={{ left: `${startPct}%`, width: `${Math.max(1, endPct - startPct)}%` }}
+                      />
+                      <input
+                        type="range"
+                        min={0}
+                        max={videoDuration}
+                        step={0.01}
+                        value={startSec}
+                        onChange={(e) => onStartHandleChange(Number(e.target.value))}
+                        className="trim-slider"
+                      />
+                      <input
+                        type="range"
+                        min={0}
+                        max={videoDuration}
+                        step={0.01}
+                        value={endSec}
+                        onChange={(e) => onEndHandleChange(Number(e.target.value))}
+                        className="trim-slider"
+                      />
+                    </div>
+                    <div className="mt-1 flex justify-between text-[11px] text-[var(--text-muted)]">
+                      <span>0:00.0</span>
+                      <span>{formatTime(videoDuration)}</span>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
@@ -392,7 +599,7 @@ function App() {
                     min={0}
                     step={0.1}
                     value={startSec}
-                    onChange={(e) => setStartSec(Number(e.target.value))}
+                    onChange={(e) => clampTrim(Number(e.target.value), durationSec)}
                     className={fieldClass}
                   />
                 </label>
@@ -404,7 +611,7 @@ function App() {
                     min={0.2}
                     step={0.1}
                     value={durationSec}
-                    onChange={(e) => setDurationSec(Number(e.target.value))}
+                    onChange={(e) => clampTrim(startSec, Number(e.target.value))}
                     className={fieldClass}
                   />
                 </label>
@@ -425,6 +632,24 @@ function App() {
                     ? PLATFORM_PROFILES[platform].note
                     : 'Target size mode is off. Output uses your exact settings in a single pass.'}
                 </p>
+
+                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--surface-2)] p-3 text-xs text-[var(--text-muted)] sm:col-span-2">
+                  <p>
+                    Estimated output: <strong>{estimatedMb.toFixed(2)} MB</strong> (likely range{' '}
+                    {estimatedMinMb.toFixed(2)}-{estimatedMaxMb.toFixed(2)} MB)
+                  </p>
+                  {targetSizeMode ? (
+                    <p className="mt-1">
+                      {estimatedMaxMb <= targetSizeMb
+                        ? 'Likely under target size.'
+                        : estimatedMinMb > targetSizeMb
+                          ? 'Likely over target size. Reduce duration, width, or FPS.'
+                          : 'Close to target; actual output may vary by scene complexity.'}
+                    </p>
+                  ) : (
+                    <p className="mt-1">Target mode is off. This is an estimate for your current settings.</p>
+                  )}
+                </div>
 
                 <label className="text-sm sm:col-span-2">
                   <span className="mb-1 block font-medium text-[var(--secondary)]">Target size mode</span>

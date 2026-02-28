@@ -7,8 +7,10 @@ A shareable browser app that converts video clips into high-quality GIFs using F
 - Client-side conversion (no backend required)
 - Quality presets: `ultra`, `balanced`, `compact`
 - Controls: FPS, width, colors, dither, speed, start time, duration, loop count
+- Drag-handle trim timeline (start/end) driven by source video metadata
 - Platform profiles: LinkedIn (7 MB), Instagram (8 MB target), Facebook (12 MB target), Custom
 - Target-size mode that retries with tighter settings until under the selected MB cap
+- Live output size estimate shown before rendering (with likely range)
 - In-app preview and one-click download
 
 ## Requirements
