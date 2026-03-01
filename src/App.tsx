@@ -13,6 +13,21 @@ type Settings = {
 };
 
 type DitherKey = Settings['dither'];
+type PersistedSettings = {
+  preset: PresetKey;
+  fps: number;
+  width: number;
+  colors: number;
+  dither: DitherKey;
+  startSec: number;
+  durationSec: number;
+  loopCount: number;
+  speed: number;
+  isDark: boolean;
+  platform: PlatformKey;
+  targetSizeMb: number;
+  targetSizeMode: boolean;
+};
 
 const PRESETS: Record<PresetKey, Settings> = {
   ultra: { fps: 20, width: 1280, colors: 256, dither: 'sierra2_4a' },
@@ -48,6 +63,7 @@ const PLATFORM_PROFILES: Record<
 
 const CORE_BASE = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
 const MIN_TRIM_DURATION = 0.2;
+const SETTINGS_STORAGE_KEY = 'gif-maker:settings:v2';
 
 const DITHER_FACTORS: Record<DitherKey, number> = {
   none: 0.85,
@@ -56,6 +72,51 @@ const DITHER_FACTORS: Record<DitherKey, number> = {
   sierra2: 1.1,
   sierra2_4a: 1.12
 };
+
+function isPresetKey(value: unknown): value is PresetKey {
+  return value === 'ultra' || value === 'balanced' || value === 'compact';
+}
+
+function isPlatformKey(value: unknown): value is PlatformKey {
+  return value === 'linkedin' || value === 'instagram' || value === 'facebook' || value === 'custom';
+}
+
+function isDitherKey(value: unknown): value is DitherKey {
+  return value === 'none' || value === 'bayer' || value === 'floyd_steinberg' || value === 'sierra2' || value === 'sierra2_4a';
+}
+
+function readPersistedSettings(): Partial<PersistedSettings> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    const data = parsed as Record<string, unknown>;
+    return {
+      preset: isPresetKey(data.preset) ? data.preset : undefined,
+      fps: typeof data.fps === 'number' ? data.fps : undefined,
+      width: typeof data.width === 'number' ? data.width : undefined,
+      colors: typeof data.colors === 'number' ? data.colors : undefined,
+      dither: isDitherKey(data.dither) ? data.dither : undefined,
+      startSec: typeof data.startSec === 'number' ? data.startSec : undefined,
+      durationSec: typeof data.durationSec === 'number' ? data.durationSec : undefined,
+      loopCount: typeof data.loopCount === 'number' ? data.loopCount : undefined,
+      speed: typeof data.speed === 'number' ? data.speed : undefined,
+      isDark: typeof data.isDark === 'boolean' ? data.isDark : undefined,
+      platform: isPlatformKey(data.platform) ? data.platform : undefined,
+      targetSizeMb: typeof data.targetSizeMb === 'number' ? data.targetSizeMb : undefined,
+      targetSizeMode: typeof data.targetSizeMode === 'boolean' ? data.targetSizeMode : undefined
+    };
+  } catch {
+    return {};
+  }
+}
+
+function sanitizePositiveNumber(value: number, fallback: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
 
 function estimateGifBytes(params: {
   width: number;
@@ -76,39 +137,165 @@ function estimateGifBytes(params: {
 
 function App() {
   const ffmpegRef = useRef(new FFmpeg());
+  const cancelRequestedRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const persistedSettingsRef = useRef<Partial<PersistedSettings> | null>(null);
+  if (persistedSettingsRef.current === null) {
+    persistedSettingsRef.current = readPersistedSettings();
+  }
+  const persisted = persistedSettingsRef.current;
+
   const [loaded, setLoaded] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [preset, setPreset] = useState<PresetKey>('balanced');
-  const [fps, setFps] = useState(PRESETS.balanced.fps);
-  const [width, setWidth] = useState(PRESETS.balanced.width);
-  const [colors, setColors] = useState(PRESETS.balanced.colors);
-  const [dither, setDither] = useState<Settings['dither']>(PRESETS.balanced.dither);
-  const [startSec, setStartSec] = useState(0);
-  const [durationSec, setDurationSec] = useState(5);
-  const [loopCount, setLoopCount] = useState(0);
-  const [speed, setSpeed] = useState(1);
+  const [preset, setPreset] = useState<PresetKey>(persisted.preset ?? 'balanced');
+  const [fps, setFps] = useState(
+    sanitizePositiveNumber(
+      persisted.fps ?? PRESETS.balanced.fps,
+      PRESETS.balanced.fps,
+      1,
+      60
+    )
+  );
+  const [width, setWidth] = useState(
+    sanitizePositiveNumber(
+      persisted.width ?? PRESETS.balanced.width,
+      PRESETS.balanced.width,
+      120,
+      2560
+    )
+  );
+  const [colors, setColors] = useState(
+    sanitizePositiveNumber(
+      persisted.colors ?? PRESETS.balanced.colors,
+      PRESETS.balanced.colors,
+      2,
+      256
+    )
+  );
+  const [dither, setDither] = useState<Settings['dither']>(persisted.dither ?? PRESETS.balanced.dither);
+  const [startSec, setStartSec] = useState(
+    sanitizePositiveNumber(persisted.startSec ?? 0, 0, 0, 3600)
+  );
+  const [durationSec, setDurationSec] = useState(
+    sanitizePositiveNumber(persisted.durationSec ?? 5, 5, MIN_TRIM_DURATION, 3600)
+  );
+  const [loopCount, setLoopCount] = useState(
+    sanitizePositiveNumber(persisted.loopCount ?? 0, 0, 0, 1000)
+  );
+  const [speed, setSpeed] = useState(
+    sanitizePositiveNumber(persisted.speed ?? 1, 1, 0.25, 4)
+  );
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('Load ffmpeg and drop a video to begin.');
   const [gifUrl, setGifUrl] = useState<string | null>(null);
-  const [isDark, setIsDark] = useState(false);
-  const [platform, setPlatform] = useState<PlatformKey>('linkedin');
-  const [targetSizeMb, setTargetSizeMb] = useState(PLATFORM_PROFILES.linkedin.targetMb);
-  const [targetSizeMode, setTargetSizeMode] = useState(true);
+  const [isDark, setIsDark] = useState(persisted.isDark ?? false);
+  const [platform, setPlatform] = useState<PlatformKey>(persisted.platform ?? 'linkedin');
+  const [targetSizeMb, setTargetSizeMb] = useState(
+    sanitizePositiveNumber(
+      persisted.targetSizeMb ?? PLATFORM_PROFILES.linkedin.targetMb,
+      PLATFORM_PROFILES.linkedin.targetMb,
+      1,
+      100
+    )
+  );
+  const [targetSizeMode, setTargetSizeMode] = useState(persisted.targetSizeMode ?? true);
   const [videoDuration, setVideoDuration] = useState(0);
   const [videoWidth, setVideoWidth] = useState(0);
   const [videoHeight, setVideoHeight] = useState(0);
   const [estimateBias, setEstimateBias] = useState(1);
+  const [dragActive, setDragActive] = useState(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
   }, [isDark]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const snapshot: PersistedSettings = {
+      preset,
+      fps: sanitizePositiveNumber(fps, PRESETS.balanced.fps, 1, 60),
+      width: sanitizePositiveNumber(width, PRESETS.balanced.width, 120, 2560),
+      colors: sanitizePositiveNumber(colors, PRESETS.balanced.colors, 2, 256),
+      dither,
+      startSec: sanitizePositiveNumber(startSec, 0, 0, 3600),
+      durationSec: sanitizePositiveNumber(durationSec, 5, MIN_TRIM_DURATION, 3600),
+      loopCount: sanitizePositiveNumber(loopCount, 0, 0, 1000),
+      speed: sanitizePositiveNumber(speed, 1, 0.25, 4),
+      isDark,
+      platform,
+      targetSizeMb: sanitizePositiveNumber(targetSizeMb, 7, 1, 100),
+      targetSizeMode
+    };
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(snapshot));
+  }, [
+    colors,
+    dither,
+    durationSec,
+    fps,
+    isDark,
+    loopCount,
+    platform,
+    preset,
+    speed,
+    startSec,
+    targetSizeMb,
+    targetSizeMode,
+    width
+  ]);
+
+  useEffect(() => {
     if (platform !== 'custom') {
       setTargetSizeMb(PLATFORM_PROFILES[platform].targetMb);
     }
   }, [platform]);
+
+  const clearGifPreview = () => {
+    if (gifUrl) URL.revokeObjectURL(gifUrl);
+    setGifUrl(null);
+  };
+
+  const handleIncomingFile = (nextFile: File, source: 'picker' | 'drop' | 'paste') => {
+    if (!nextFile.type.startsWith('video/')) {
+      setStatus('Please provide a video file.');
+      return;
+    }
+    if (generating) {
+      setStatus('Cancel current render before loading another file.');
+      return;
+    }
+    clearGifPreview();
+    setFile(nextFile);
+    if (source === 'drop') setStatus(`Loaded ${nextFile.name} from drag-and-drop.`);
+    if (source === 'paste') setStatus(`Loaded ${nextFile.name} from clipboard.`);
+  };
+
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      const active = document.activeElement;
+      if (
+        active instanceof HTMLElement &&
+        (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)
+      ) {
+        return;
+      }
+
+      const items = event.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.kind !== 'file') continue;
+        const candidate = item.getAsFile();
+        if (candidate && candidate.type.startsWith('video/')) {
+          event.preventDefault();
+          handleIncomingFile(candidate, 'paste');
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [generating, gifUrl]);
 
   useEffect(() => {
     if (!file) {
@@ -204,6 +391,21 @@ function App() {
   const estimatedMinMb = estimatedMb * 0.65;
   const estimatedMaxMb = estimatedMb * 1.35;
 
+  const cancelRender = () => {
+    if (!generating) return;
+    cancelRequestedRef.current = true;
+    try {
+      ffmpegRef.current.terminate();
+    } catch {
+      // no-op if ffmpeg isn't running
+    }
+    ffmpegRef.current = new FFmpeg();
+    setLoaded(false);
+    setGenerating(false);
+    setProgress(0);
+    setStatus('Render canceled. Ready for next conversion.');
+  };
+
   const loadFFmpeg = async () => {
     if (loaded) return;
     const ffmpeg = ffmpegRef.current;
@@ -230,6 +432,7 @@ function App() {
     }
 
     try {
+      cancelRequestedRef.current = false;
       await loadFFmpeg();
       setGenerating(true);
       setProgress(0);
@@ -258,6 +461,7 @@ function App() {
         attemptColors: number,
         attemptLabel: string
       ) => {
+        if (cancelRequestedRef.current) throw new Error('Render canceled');
         const scaleAndRate = `fps=${attemptFps},scale=${attemptWidth}:-1:flags=lanczos${speedFilter}`;
         setStatus(attemptLabel);
         await ffmpeg.exec([
@@ -286,6 +490,7 @@ function App() {
           String(loopCount),
           outputName
         ]);
+        if (cancelRequestedRef.current) throw new Error('Render canceled');
         const data = await ffmpeg.readFile(outputName);
         const bytes =
           data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data);
@@ -314,6 +519,7 @@ function App() {
             attemptColors,
             `Generating attempt ${attempt}/${maxAttempts} for <= ${targetSizeMb} MB...`
           );
+          if (cancelRequestedRef.current) throw new Error('Render canceled');
 
           if (finalBlob.size <= targetBytes) {
             hitTarget = true;
@@ -334,6 +540,7 @@ function App() {
           finalColors,
           'Generating GIF with current settings...'
         );
+        if (cancelRequestedRef.current) throw new Error('Render canceled');
       }
 
       if (!finalBlob) {
@@ -372,10 +579,15 @@ function App() {
       await ffmpeg.deleteFile(paletteName);
       await ffmpeg.deleteFile(outputName);
     } catch (error) {
-      console.error(error);
-      setStatus('Conversion failed. Try a shorter clip or lower preset.');
+      if (cancelRequestedRef.current) {
+        setStatus('Render canceled.');
+      } else {
+        console.error(error);
+        setStatus('Conversion failed. Try a shorter clip or lower preset.');
+      }
     } finally {
       setGenerating(false);
+      cancelRequestedRef.current = false;
     }
   };
 
@@ -411,13 +623,60 @@ function App() {
           <div className="rounded-[var(--radius)] border border-[var(--color-border-subtle)] bg-[var(--surface)] p-6 shadow-[var(--shadow)]">
             <div className="space-y-4">
               <div>
-                <label className="mb-2 block text-sm font-medium text-[var(--secondary)]">Video file</label>
-                <input
-                  type="file"
-                  accept="video/*"
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                  className="block w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3 text-sm text-[var(--text)]"
-                />
+                <label htmlFor="video-file-input" className="mb-2 block text-sm font-medium text-[var(--secondary)]">
+                  Video file
+                </label>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Upload a video by browsing, dragging and dropping, or pasting from clipboard"
+                  onClick={() => fileInputRef.current?.click()}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      fileInputRef.current?.click();
+                    }
+                  }}
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    setDragActive(true);
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDragActive(true);
+                  }}
+                  onDragLeave={(event) => {
+                    event.preventDefault();
+                    if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+                    setDragActive(false);
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    setDragActive(false);
+                    const dropped = Array.from(event.dataTransfer.files).find((candidate) =>
+                      candidate.type.startsWith('video/')
+                    );
+                    if (dropped) handleIncomingFile(dropped, 'drop');
+                  }}
+                  className={`rounded-xl border-2 border-dashed p-3 transition ${
+                    dragActive
+                      ? 'border-[var(--link)] bg-[var(--teal-50)]'
+                      : 'border-[var(--color-border)] bg-[var(--color-surface-muted)]'
+                  }`}
+                >
+                  <input
+                    id="video-file-input"
+                    ref={fileInputRef}
+                    type="file"
+                    accept="video/*"
+                    onChange={(e) => {
+                      const nextFile = e.target.files?.[0];
+                      if (nextFile) handleIncomingFile(nextFile, 'picker');
+                    }}
+                    className="sr-only"
+                  />
+                  <p className="text-sm text-[var(--text)]">Click to browse, drag and drop, or paste a video.</p>
+                </div>
                 {file ? <p className="mt-2 text-xs text-[var(--text-muted)]">Loaded: {file.name}</p> : null}
               </div>
 
@@ -594,13 +853,14 @@ function App() {
                 <label className="text-sm sm:col-span-2">
                   <span className="mb-1 flex items-center gap-2 font-medium text-[var(--secondary)]">
                     Target size mode
-                    <span
+                    <button
+                      type="button"
                       className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--surface-2)] text-[11px] font-semibold text-[var(--secondary)]"
                       title={targetSizeModeHelp}
                       aria-label={targetSizeModeHelp}
                     >
                       i
-                    </span>
+                    </button>
                   </span>
                   <button
                     type="button"
@@ -612,7 +872,7 @@ function App() {
                 </label>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3" aria-busy={generating}>
                 <button
                   onClick={generateGif}
                   disabled={!file || generating}
@@ -621,16 +881,32 @@ function App() {
                   {generating ? 'Generating...' : 'Create GIF'}
                 </button>
                 <button
+                  onClick={cancelRender}
+                  disabled={!generating}
+                  className="rounded-xl border border-[var(--color-border)] bg-[var(--surface-2)] px-4 py-2 text-sm font-semibold text-[var(--secondary)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
                   onClick={loadFFmpeg}
                   disabled={loaded}
                   className="rounded-xl border border-[var(--color-border)] bg-[var(--surface-2)] px-4 py-2 text-sm font-semibold text-[var(--secondary)] disabled:opacity-50"
                 >
                   {loaded ? 'ffmpeg loaded' : 'Preload ffmpeg'}
                 </button>
-                <span className="text-xs text-[var(--text-muted)]">{status}</span>
+                <span className="text-xs text-[var(--text-muted)]" role="status" aria-live="polite">
+                  {status}
+                </span>
               </div>
 
-              <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-2)]">
+              <div
+                className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-2)]"
+                role="progressbar"
+                aria-label="Conversion progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(progress * 100)}
+              >
                 <div
                   className="h-full bg-[var(--link)] transition-all"
                   style={{ width: `${Math.round(progress * 100)}%` }}
