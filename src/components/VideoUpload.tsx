@@ -4,10 +4,12 @@ import { LARGE_FILE_WARNING_BYTES } from '../types';
 type VideoUploadProps = {
   file: File | null;
   generating: boolean;
+  thumbnailUrl: string | null;
+  videoDimensions: { width: number; height: number } | null;
   onFileSelected: (file: File, source: 'picker' | 'drop') => void;
 };
 
-export function VideoUpload({ file, generating, onFileSelected }: VideoUploadProps) {
+export function VideoUpload({ file, generating, thumbnailUrl, videoDimensions, onFileSelected }: VideoUploadProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
@@ -93,7 +95,28 @@ export function VideoUpload({ file, generating, onFileSelected }: VideoUploadPro
         </p>
       </div>
       {file && (
-        <p className="mt-2 text-xs text-[var(--text-muted)]">Loaded: {file.name}</p>
+        <div className="mt-3 flex items-start gap-3">
+          {thumbnailUrl ? (
+            <img
+              src={thumbnailUrl}
+              alt="Video thumbnail"
+              className="h-16 w-auto flex-shrink-0 rounded-lg border border-[var(--color-border)] object-cover"
+            />
+          ) : (
+            <div className="flex h-16 w-24 flex-shrink-0 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)]">
+              <span className="text-xs text-[var(--text-muted)]">No preview</span>
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-[var(--text)]">{file.name}</p>
+            <p className="text-xs text-[var(--text-muted)]">
+              {(file.size / (1024 * 1024)).toFixed(1)} MB
+              {videoDimensions && videoDimensions.width > 0 && (
+                <span> &middot; {videoDimensions.width}&times;{videoDimensions.height}</span>
+              )}
+            </p>
+          </div>
+        </div>
       )}
       {warning && (
         <p className="mt-2 text-xs font-medium text-[var(--orange-500)]" role="alert">

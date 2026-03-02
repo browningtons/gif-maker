@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type DitherKey,
   MIN_TRIM_DURATION,
@@ -91,11 +91,14 @@ function App() {
     [ffmpeg]
   );
 
-  const gifName = useMemo(() => {
-    if (!file) return 'output.gif';
-    const base = file.name.replace(/\.[^.]+$/, '');
-    return `${base}.gif`;
-  }, [file]);
+  const [gifName, setGifName] = useState('output.gif');
+  const prevFileRef = useRef<File | null>(null);
+  // Auto-update filename when a new file is loaded, but preserve user edits otherwise
+  if (file !== prevFileRef.current) {
+    prevFileRef.current = file;
+    const defaultName = file ? `${file.name.replace(/\.[^.]+$/, '')}.gif` : 'output.gif';
+    setGifName(defaultName);
+  }
 
   const effectiveDuration = useMemo(
     () => Math.max(MIN_TRIM_DURATION, settings.durationSec) / Math.max(SPEED_MIN, settings.speed),
@@ -163,6 +166,8 @@ function App() {
               <VideoUpload
                 file={file}
                 generating={ffmpeg.generating}
+                thumbnailUrl={videoMeta.thumbnailUrl}
+                videoDimensions={videoMeta.width > 0 ? { width: videoMeta.width, height: videoMeta.height } : null}
                 onFileSelected={handleFileSelected}
               />
 
@@ -214,7 +219,7 @@ function App() {
             </div>
           </div>
 
-          <Preview gifUrl={ffmpeg.gifUrl} gifName={gifName} />
+          <Preview gifUrl={ffmpeg.gifUrl} gifName={gifName} onGifNameChange={setGifName} />
         </section>
       </div>
     </main>
