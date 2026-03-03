@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  type DitherKey,
   MIN_TRIM_DURATION,
   SPEED_MIN,
 } from './types';
@@ -15,6 +14,11 @@ import { SizeEstimate } from './components/SizeEstimate';
 import { ActionBar } from './components/ActionBar';
 import { Preview } from './components/Preview';
 
+function getDefaultGifName(file: File | null): string {
+  if (!file) return 'output.gif';
+  return `${file.name.replace(/\.[^.]+$/, '')}.gif`;
+}
+
 function App() {
   const settings = useSettings();
   const [file, setFile] = useState<File | null>(null);
@@ -26,9 +30,7 @@ function App() {
       settings.setStartSec(0);
       settings.setDurationSec(defaultDuration);
     },
-    // settings setters are stable
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+    [settings.setDurationSec, settings.setStartSec]
   );
   const videoMeta = useVideoMeta(file, onVideoMetaLoaded);
 
@@ -60,28 +62,6 @@ function App() {
     return () => window.removeEventListener('paste', handlePaste);
   }, [ffmpeg]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Ctrl+Enter or Cmd+Enter to generate
-      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-        event.preventDefault();
-        if (file && !ffmpeg.generating) {
-          handleGenerate();
-        }
-        return;
-      }
-      // Escape to cancel
-      if (event.key === 'Escape' && ffmpeg.generating) {
-        event.preventDefault();
-        ffmpeg.cancelRender();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [file, ffmpeg.generating]);
-
   const handleFileSelected = useCallback(
     (nextFile: File, source: 'picker' | 'drop') => {
       ffmpeg.clearGifPreview();
@@ -91,14 +71,10 @@ function App() {
     [ffmpeg]
   );
 
-  const [gifName, setGifName] = useState('output.gif');
-  const prevFileRef = useRef<File | null>(null);
-  // Auto-update filename when a new file is loaded, but preserve user edits otherwise
-  if (file !== prevFileRef.current) {
-    prevFileRef.current = file;
-    const defaultName = file ? `${file.name.replace(/\.[^.]+$/, '')}.gif` : 'output.gif';
-    setGifName(defaultName);
-  }
+  const [gifName, setGifName] = useState(() => getDefaultGifName(file));
+  useEffect(() => {
+    setGifName(getDefaultGifName(file));
+  }, [file]);
 
   const effectiveDuration = useMemo(
     () => Math.max(MIN_TRIM_DURATION, settings.durationSec) / Math.max(SPEED_MIN, settings.speed),
@@ -146,11 +122,36 @@ function App() {
       videoWidth: videoMeta.width,
       videoHeight: videoMeta.height,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file, settings.fps, settings.width, settings.colors, settings.dither,
       settings.speed, settings.startSec, settings.durationSec, settings.loopCount,
       settings.targetSizeMode, settings.targetSizeMb, videoMeta.width, videoMeta.height,
-      ffmpeg.generateGif]);
+      ffmpeg.generateGif, ffmpeg.setStatus]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Ctrl+Enter or Cmd+Enter to generate
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault();
+        if (file && !ffmpeg.generating) {
+          handleGenerate();
+        }
+        return;
+      }
+      // Escape to cancel
+      if (event.key === 'Escape' && ffmpeg.generating) {
+        event.preventDefault();
+        ffmpeg.cancelRender();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [file, ffmpeg.cancelRender, ffmpeg.generating, handleGenerate]);
+
+  const videoDimensions = useMemo(
+    () => (videoMeta.width > 0 ? { width: videoMeta.width, height: videoMeta.height } : null),
+    [videoMeta.height, videoMeta.width]
+  );
 
   return (
     <main className="min-h-screen p-6 text-[var(--text)] md:p-10">
@@ -167,7 +168,7 @@ function App() {
                 file={file}
                 generating={ffmpeg.generating}
                 thumbnailUrl={videoMeta.thumbnailUrl}
-                videoDimensions={videoMeta.width > 0 ? { width: videoMeta.width, height: videoMeta.height } : null}
+                videoDimensions={videoDimensions}
                 onFileSelected={handleFileSelected}
               />
 
@@ -176,7 +177,7 @@ function App() {
                 fps={settings.fps}
                 width={settings.width}
                 colors={settings.colors}
-                dither={settings.dither as DitherKey}
+                dither={settings.dither}
                 speed={settings.speed}
                 startSec={settings.startSec}
                 durationSec={settings.durationSec}
