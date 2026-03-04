@@ -1,5 +1,5 @@
 export type PresetKey = 'ultra' | 'balanced' | 'compact';
-export type PlatformKey = 'linkedin' | 'instagram' | 'facebook' | 'custom';
+export type PlatformKey = 'linkedin' | 'x' | 'instagram' | 'facebook' | 'tiktok' | 'custom';
 export type DitherKey = 'none' | 'bayer' | 'floyd_steinberg' | 'sierra2' | 'sierra2_4a';
 
 export type Settings = {
@@ -39,25 +39,41 @@ export const PRESETS: Record<PresetKey, Settings> = {
 
 export const PLATFORM_PROFILES: Record<
   PlatformKey,
-  { label: string; targetMb: number; note: string }
+  { label: string; limitMb: number; targetMb: number; note: string }
 > = {
   linkedin: {
-    label: 'LinkedIn post (7 MB limit)',
-    targetMb: 7,
-    note: 'Set to the assumed LinkedIn upper limit of 7 MB.',
+    label: 'LinkedIn post',
+    limitMb: 7,
+    targetMb: 6.65,
+    note: 'Recommended target uses 95% of the 7 MB cap for safer uploads.',
+  },
+  x: {
+    label: 'X post',
+    limitMb: 15,
+    targetMb: 14.25,
+    note: 'Recommended target uses 95% of X upload headroom.',
   },
   instagram: {
-    label: 'Instagram (prefer MP4; GIF target 8 MB)',
-    targetMb: 8,
-    note: 'Instagram is video-first. GIFs may be converted by tools before upload.',
+    label: 'Instagram',
+    limitMb: 8,
+    targetMb: 7.6,
+    note: 'Instagram is video-first. GIFs are often converted before posting.',
   },
   facebook: {
-    label: 'Facebook (roomier target 12 MB)',
-    targetMb: 12,
-    note: 'Facebook allows larger media, but smaller GIFs still load faster.',
+    label: 'Facebook',
+    limitMb: 12,
+    targetMb: 11.4,
+    note: 'Facebook allows larger uploads, but lighter GIFs render faster in feed.',
+  },
+  tiktok: {
+    label: 'TikTok',
+    limitMb: 10,
+    targetMb: 9.5,
+    note: 'TikTok is also video-first. Use GIF only when a short loop is required.',
   },
   custom: {
     label: 'Custom target',
+    limitMb: 100,
     targetMb: 8,
     note: 'Set your own output cap in MB.',
   },
@@ -79,8 +95,6 @@ export const DITHER_FACTORS: Record<DitherKey, number> = {
 export const BASE_BYTES_PER_PIXEL_FRAME = 0.055;
 export const ESTIMATE_COLOR_FLOOR = 0.75;
 export const ESTIMATE_COLOR_RANGE = 0.5;
-export const ESTIMATE_CONFIDENCE_LOW = 0.65;
-export const ESTIMATE_CONFIDENCE_HIGH = 1.35;
 
 // Rendering limits
 export const FPS_MIN = 1;

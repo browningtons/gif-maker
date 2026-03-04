@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MIN_TRIM_DURATION,
   SPEED_MIN,
@@ -13,6 +13,7 @@ import { Controls } from './components/Controls';
 import { SizeEstimate } from './components/SizeEstimate';
 import { ActionBar } from './components/ActionBar';
 import { Preview } from './components/Preview';
+import { Celebration } from './components/Celebration';
 
 function getDefaultGifName(file: File | null): string {
   if (!file) return 'output.gif';
@@ -22,8 +23,18 @@ function getDefaultGifName(file: File | null): string {
 function App() {
   const settings = useSettings();
   const [file, setFile] = useState<File | null>(null);
+  const [timeToFirstGifMs, setTimeToFirstGifMs] = useState<number | null>(null);
+  const firstRenderStartRef = useRef<number | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const lastGifUrlRef = useRef<string | null>(null);
 
   const ffmpeg = useFFmpeg();
+
+  useEffect(() => {
+    void ffmpeg.loadFFmpeg({ silent: true }).catch(() => {
+      // Background preload failure is non-blocking; we retry when generating.
+    });
+  }, [ffmpeg.loadFFmpeg]);
 
   const onVideoMetaLoaded = useCallback(
     (defaultDuration: number) => {
@@ -102,12 +113,15 @@ function App() {
 
   const estimatedMb = estimatedBytes / (1024 * 1024);
 
-  const handleGenerate = useCallback(() => {
+  const handleGenerate = useCallback(async () => {
     if (!file) {
       ffmpeg.setStatus('Choose a video file first.');
       return;
     }
-    ffmpeg.generateGif({
+    if (firstRenderStartRef.current === null) {
+      firstRenderStartRef.current = performance.now();
+    }
+    const result = await ffmpeg.generateGif({
       file,
       fps: settings.fps,
       width: settings.width,
@@ -122,10 +136,13 @@ function App() {
       videoWidth: videoMeta.width,
       videoHeight: videoMeta.height,
     });
+    if (result && timeToFirstGifMs === null && firstRenderStartRef.current !== null) {
+      setTimeToFirstGifMs(Math.round(performance.now() - firstRenderStartRef.current));
+    }
   }, [file, settings.fps, settings.width, settings.colors, settings.dither,
       settings.speed, settings.startSec, settings.durationSec, settings.loopCount,
       settings.targetSizeMode, settings.targetSizeMb, videoMeta.width, videoMeta.height,
-      ffmpeg.generateGif, ffmpeg.setStatus]);
+      ffmpeg.generateGif, ffmpeg.setStatus, timeToFirstGifMs]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -153,8 +170,17 @@ function App() {
     [videoMeta.height, videoMeta.width]
   );
 
+  useEffect(() => {
+    if (!ffmpeg.gifUrl || ffmpeg.gifUrl === lastGifUrlRef.current) return;
+    lastGifUrlRef.current = ffmpeg.gifUrl;
+    setShowCelebration(true);
+    const timer = window.setTimeout(() => setShowCelebration(false), 2400);
+    return () => window.clearTimeout(timer);
+  }, [ffmpeg.gifUrl]);
+
   return (
     <main className="min-h-screen p-6 text-[var(--text)] md:p-10">
+      <Celebration show={showCelebration} />
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
         <Header
           isDark={settings.isDark}
@@ -208,14 +234,13 @@ function App() {
 
               <ActionBar
                 file={file}
-                loaded={ffmpeg.loaded}
                 generating={ffmpeg.generating}
                 progress={ffmpeg.progress}
                 stage={ffmpeg.stage}
                 status={ffmpeg.status}
+                timeToFirstGifMs={timeToFirstGifMs}
                 onGenerate={handleGenerate}
                 onCancel={ffmpeg.cancelRender}
-                onPreload={ffmpeg.loadFFmpeg}
               />
             </div>
           </div>

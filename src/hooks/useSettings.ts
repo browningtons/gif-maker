@@ -80,7 +80,12 @@ export function useSettings() {
       speed: clamp(speed, SPEED_MIN, SPEED_MAX, 1),
       isDark,
       platform,
-      targetSizeMb: clamp(targetSizeMb, TARGET_SIZE_MIN, TARGET_SIZE_MAX, 7),
+      targetSizeMb: clamp(
+        targetSizeMb,
+        TARGET_SIZE_MIN,
+        TARGET_SIZE_MAX,
+        PLATFORM_PROFILES.linkedin.targetMb
+      ),
       targetSizeMode,
     };
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(snapshot));

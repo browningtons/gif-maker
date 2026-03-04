@@ -17,8 +17,10 @@ export function isPresetKey(value: unknown): value is PresetKey {
 export function isPlatformKey(value: unknown): value is PlatformKey {
   return (
     value === 'linkedin' ||
+    value === 'x' ||
     value === 'instagram' ||
     value === 'facebook' ||
+    value === 'tiktok' ||
     value === 'custom'
   );
 }

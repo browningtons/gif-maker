@@ -9,11 +9,10 @@ export function Header({ isDark, onToggleTheme }: HeaderProps) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-[var(--secondary)]">
-            GIF Maker
+            LoopForge
           </h1>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Browser-based GIF creation from your videos. No server needed, shareable
-            with friends.
+            Convert screen recordings into platform-ready GIFs in your browser with no server upload.
           </p>
         </div>
         <button

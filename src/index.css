@@ -114,3 +114,81 @@ a:hover {
   outline-offset: 2px;
   border-radius: 8px;
 }
+
+.celebration-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -12%;
+  width: 8px;
+  height: 14px;
+  border-radius: 999px;
+  opacity: 0.85;
+  animation-name: confetti-fall;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+
+.confetti-piece:nth-child(4n + 1) {
+  background: var(--orange-400);
+}
+
+.confetti-piece:nth-child(4n + 2) {
+  background: var(--teal-500);
+}
+
+.confetti-piece:nth-child(4n + 3) {
+  background: var(--blue-500);
+}
+
+.confetti-piece:nth-child(4n + 4) {
+  background: color-mix(in srgb, var(--orange-500) 70%, white);
+}
+
+.emoji-drop {
+  position: absolute;
+  top: -10%;
+  font-size: 1.5rem;
+  opacity: 0.95;
+  animation-name: emoji-fall;
+  animation-timing-function: ease-in;
+  animation-fill-mode: both;
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-10vh) rotate(0deg);
+    opacity: 0;
+  }
+
+  8% {
+    opacity: 0.95;
+  }
+
+  100% {
+    transform: translateY(110vh) rotate(540deg);
+    opacity: 0;
+  }
+}
+
+@keyframes emoji-fall {
+  0% {
+    transform: translateY(-10vh) rotate(-6deg) scale(0.9);
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(108vh) rotate(8deg) scale(1.05);
+    opacity: 0;
+  }
+}

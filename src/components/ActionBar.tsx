@@ -2,14 +2,13 @@ import { type RenderStage } from '../hooks/useFFmpeg';
 
 type ActionBarProps = {
   file: File | null;
-  loaded: boolean;
   generating: boolean;
   progress: number;
   stage: RenderStage;
   status: string;
+  timeToFirstGifMs: number | null;
   onGenerate: () => void;
   onCancel: () => void;
-  onPreload: () => void;
 };
 
 const STAGE_LABELS: Record<RenderStage, string> = {
@@ -24,8 +23,8 @@ const STAGE_LABELS: Record<RenderStage, string> = {
 
 export function ActionBar(props: ActionBarProps) {
   const {
-    file, loaded, generating, progress, stage, status,
-    onGenerate, onCancel, onPreload,
+    file, generating, progress, stage, status, timeToFirstGifMs,
+    onGenerate, onCancel,
   } = props;
 
   const stageLabel = STAGE_LABELS[stage];
@@ -38,7 +37,7 @@ export function ActionBar(props: ActionBarProps) {
           disabled={!file || generating}
           className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-contrast)] hover:bg-[var(--orange-700)] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {generating ? 'Generating...' : 'Create GIF'}
+          {generating ? 'Forging GIF...' : 'Forge Great GIF'}
         </button>
         <button
           onClick={onCancel}
@@ -46,13 +45,6 @@ export function ActionBar(props: ActionBarProps) {
           className="rounded-xl border border-[var(--color-border)] bg-[var(--surface-2)] px-4 py-2 text-sm font-semibold text-[var(--secondary)] disabled:cursor-not-allowed disabled:opacity-50"
         >
           Cancel
-        </button>
-        <button
-          onClick={onPreload}
-          disabled={loaded}
-          className="rounded-xl border border-[var(--color-border)] bg-[var(--surface-2)] px-4 py-2 text-sm font-semibold text-[var(--secondary)] disabled:opacity-50"
-        >
-          {loaded ? 'ffmpeg loaded' : 'Preload ffmpeg'}
         </button>
         <span className="text-xs text-[var(--text-muted)]" role="status" aria-live="polite">
           {status}
@@ -79,6 +71,11 @@ export function ActionBar(props: ActionBarProps) {
       </div>
 
       <p className="text-xs text-[var(--text-muted)]">
+        {timeToFirstGifMs !== null && (
+          <>
+            Time to first GIF: <strong>{(timeToFirstGifMs / 1000).toFixed(1)}s</strong>{' \u00B7 '}
+          </>
+        )}
         <kbd className="rounded border border-[var(--color-border)] bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10px]">
           Ctrl+Enter
         </kbd>{' '}

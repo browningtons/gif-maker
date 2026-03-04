@@ -9,9 +9,12 @@ type PreviewProps = {
 export function Preview({ gifUrl, gifName, onGifNameChange }: PreviewProps) {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
 
-  const handleCopyToClipboard = useCallback(async () => {
+  const handleCopyToClipboard = useCallback(async (silent = false) => {
     if (!gifUrl) return;
     try {
+      if (typeof navigator === 'undefined' || !navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+        throw new Error('Clipboard API not available');
+      }
       const response = await fetch(gifUrl);
       const blob = await response.blob();
       // ClipboardItem requires specific MIME types; try image/png fallback
@@ -48,12 +51,16 @@ export function Preview({ gifUrl, gifName, onGifNameChange }: PreviewProps) {
           new ClipboardItem({ [blob.type]: blob }),
         ]);
       }
-      setCopyStatus('copied');
-      setTimeout(() => setCopyStatus('idle'), 2000);
+      if (!silent) {
+        setCopyStatus('copied');
+        setTimeout(() => setCopyStatus('idle'), 2000);
+      }
     } catch (err) {
       console.error('Clipboard copy failed:', err);
-      setCopyStatus('failed');
-      setTimeout(() => setCopyStatus('idle'), 2000);
+      if (!silent) {
+        setCopyStatus('failed');
+        setTimeout(() => setCopyStatus('idle'), 2000);
+      }
     }
   }, [gifUrl]);
 
@@ -97,22 +104,30 @@ export function Preview({ gifUrl, gifName, onGifNameChange }: PreviewProps) {
             <a
               href={gifUrl}
               download={gifName}
+              onClick={() => {
+                void handleCopyToClipboard(true);
+              }}
               className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--secondary)] px-4 py-2 text-sm font-semibold text-[var(--secondary-contrast)]"
             >
               Download
             </a>
             <button
               type="button"
-              onClick={handleCopyToClipboard}
+              onClick={() => {
+                void handleCopyToClipboard();
+              }}
               className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--surface-2)] px-4 py-2 text-sm font-semibold text-[var(--secondary)]"
             >
               {copyStatus === 'copied'
                 ? 'Copied!'
                 : copyStatus === 'failed'
                   ? 'Copy failed'
-                  : 'Copy to clipboard'}
+                  : 'Copy GIF'}
             </button>
           </div>
+          <p className="text-xs text-[var(--text-muted)]">
+            Download also attempts automatic clipboard copy for faster posting.
+          </p>
         </div>
       )}
     </aside>

@@ -75,10 +75,11 @@ export function useFFmpeg() {
     setStatus('Render canceled. Ready for next conversion.');
   }, [generating]);
 
-  const loadFFmpeg = useCallback(async () => {
+  const loadFFmpeg = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
     if (loaded) return;
     const ffmpeg = ffmpegRef.current;
-    setStage('loading');
+    if (!silent) setStage('loading');
 
     ffmpeg.on('progress', ({ progress: p }) => {
       setProgress(Math.max(0, Math.min(1, p || 0)));
@@ -87,30 +88,38 @@ export function useFFmpeg() {
     let lastError: unknown;
     for (let attempt = 1; attempt <= FFMPEG_MAX_RETRIES; attempt++) {
       try {
-        setStatus(
-          attempt === 1
-            ? 'Loading ffmpeg core (~30 MB first time)...'
-            : `Retrying ffmpeg download (attempt ${attempt}/${FFMPEG_MAX_RETRIES})...`
-        );
+        if (!silent) {
+          setStatus(
+            attempt === 1
+              ? 'Loading ffmpeg core (~30 MB first time)...'
+              : `Retrying ffmpeg download (attempt ${attempt}/${FFMPEG_MAX_RETRIES})...`
+          );
+        }
         await ffmpeg.load({
           coreURL: await toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
           wasmURL: await toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.wasm`, 'application/wasm'),
         });
         setLoaded(true);
-        setStage('idle');
-        setStatus('ffmpeg loaded. Ready to generate.');
+        if (!silent) {
+          setStage('idle');
+          setStatus('ffmpeg loaded. Ready to generate.');
+        }
         return;
       } catch (err) {
         lastError = err;
         if (attempt < FFMPEG_MAX_RETRIES) {
-          setStatus(`Download failed. Retrying in ${FFMPEG_RETRY_DELAY_MS / 1000}s...`);
+          if (!silent) {
+            setStatus(`Download failed. Retrying in ${FFMPEG_RETRY_DELAY_MS / 1000}s...`);
+          }
           await sleep(FFMPEG_RETRY_DELAY_MS);
         }
       }
     }
-    setStage('idle');
-    const msg = lastError instanceof Error ? lastError.message : 'Unknown error';
-    setStatus(`Failed to load ffmpeg after ${FFMPEG_MAX_RETRIES} attempts: ${msg}`);
+    if (!silent) {
+      setStage('idle');
+      const msg = lastError instanceof Error ? lastError.message : 'Unknown error';
+      setStatus(`Failed to load ffmpeg after ${FFMPEG_MAX_RETRIES} attempts: ${msg}`);
+    }
     throw lastError;
   }, [loaded]);
 
