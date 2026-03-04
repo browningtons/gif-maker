@@ -133,6 +133,10 @@ function App() {
       loopCount: settings.loopCount,
       targetSizeMode: settings.targetSizeMode,
       targetSizeMb: settings.targetSizeMb,
+      memeEnabled: settings.memeEnabled,
+      memeTopText: settings.memeTopText,
+      memeBottomText: settings.memeBottomText,
+      memeTextScale: settings.memeTextScale,
       videoWidth: videoMeta.width,
       videoHeight: videoMeta.height,
     });
@@ -141,7 +145,8 @@ function App() {
     }
   }, [file, settings.fps, settings.width, settings.colors, settings.dither,
       settings.speed, settings.startSec, settings.durationSec, settings.loopCount,
-      settings.targetSizeMode, settings.targetSizeMb, videoMeta.width, videoMeta.height,
+      settings.targetSizeMode, settings.targetSizeMb, settings.memeEnabled, settings.memeTopText,
+      settings.memeBottomText, settings.memeTextScale, videoMeta.width, videoMeta.height,
       ffmpeg.generateGif, ffmpeg.setStatus, timeToFirstGifMs]);
 
   // Keyboard shortcuts
@@ -211,6 +216,10 @@ function App() {
                 platform={settings.platform}
                 targetSizeMb={settings.targetSizeMb}
                 targetSizeMode={settings.targetSizeMode}
+                memeEnabled={settings.memeEnabled}
+                memeTopText={settings.memeTopText}
+                memeBottomText={settings.memeBottomText}
+                memeTextScale={settings.memeTextScale}
                 videoDuration={videoMeta.duration}
                 onPresetChange={settings.applyPreset}
                 onFpsChange={settings.setFps}
@@ -223,6 +232,10 @@ function App() {
                 onPlatformChange={settings.setPlatform}
                 onTargetSizeMbChange={settings.setTargetSizeMb}
                 onTargetSizeModeToggle={() => settings.setTargetSizeMode((c) => !c)}
+                onMemeEnabledChange={settings.setMemeEnabled}
+                onMemeTopTextChange={settings.setMemeTopText}
+                onMemeBottomTextChange={settings.setMemeBottomText}
+                onMemeTextScaleChange={settings.setMemeTextScale}
                 onRestoreDefaults={settings.restoreDefaults}
               />
 

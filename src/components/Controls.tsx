@@ -16,6 +16,8 @@ import {
   TARGET_SIZE_MIN,
   TARGET_SIZE_MAX,
   MIN_TRIM_DURATION,
+  MEME_TEXT_SCALE_MIN,
+  MEME_TEXT_SCALE_MAX,
 } from '../types';
 import { clamp } from '../utils';
 
@@ -35,6 +37,10 @@ type ControlsProps = {
   platform: PlatformKey;
   targetSizeMb: number;
   targetSizeMode: boolean;
+  memeEnabled: boolean;
+  memeTopText: string;
+  memeBottomText: string;
+  memeTextScale: number;
   videoDuration: number;
   onPresetChange: (key: PresetKey) => void;
   onFpsChange: (v: number) => void;
@@ -47,12 +53,23 @@ type ControlsProps = {
   onPlatformChange: (v: PlatformKey) => void;
   onTargetSizeMbChange: (v: number) => void;
   onTargetSizeModeToggle: () => void;
+  onMemeEnabledChange: (v: boolean) => void;
+  onMemeTopTextChange: (v: string) => void;
+  onMemeBottomTextChange: (v: string) => void;
+  onMemeTextScaleChange: (v: number) => void;
   onRestoreDefaults: () => void;
 };
 
 const TARGET_SIZE_MODE_HELP =
   'Target Size Mode uses iterative compression: each pass measures the file and only steps down width, frame rate, and color count when needed. ' +
   'Rendering stops immediately once the target is met, or returns the closest best-effort result within quality floors.';
+
+const MEME_TEMPLATES = {
+  custom: { top: '', bottom: '' },
+  standup: { top: 'LIVE LOOK AT STANDUP', bottom: 'WHEN PROD IS ON FIRE' },
+  shipit: { top: 'SHIP IT FRIDAY', bottom: 'WHAT COULD GO WRONG' },
+  sprint: { top: 'SPRINT PLANNING', bottom: 'THIS COULD HAVE BEEN AN EMAIL' },
+} as const;
 
 function formatDuration(seconds: number): string {
   if (seconds <= 0) return '0:00';
@@ -63,13 +80,15 @@ function formatDuration(seconds: number): string {
 
 export function Controls(props: ControlsProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [memeTemplate, setMemeTemplate] = useState<keyof typeof MEME_TEMPLATES>('custom');
   const {
     preset, fps, width, colors, dither, speed,
     startSec, durationSec, loopCount, platform,
-    targetSizeMb, targetSizeMode, videoDuration,
+    targetSizeMb, targetSizeMode, memeEnabled, memeTopText, memeBottomText, memeTextScale, videoDuration,
     onPresetChange, onFpsChange, onWidthChange, onColorsChange,
     onDitherChange, onSpeedChange, onTrimChange, onLoopCountChange,
     onPlatformChange, onTargetSizeMbChange, onTargetSizeModeToggle,
+    onMemeEnabledChange, onMemeTopTextChange, onMemeBottomTextChange, onMemeTextScaleChange,
     onRestoreDefaults,
   } = props;
 
@@ -165,6 +184,104 @@ export function Controls(props: ControlsProps) {
             ? PLATFORM_PROFILES[platform].note
             : 'Target Size Mode is off. LoopForge will render one pass with your exact settings.'}
         </p>
+      </section>
+
+      <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--surface)] p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-[var(--secondary)]">Meme maker</h3>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              Add top and bottom captions directly onto the exported GIF.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onMemeEnabledChange(!memeEnabled)}
+            className={`rounded-xl border px-3 py-1.5 text-xs font-semibold ${
+              memeEnabled
+                ? 'border-[var(--teal-700)] bg-[var(--teal-50)] text-[var(--teal-700)]'
+                : 'border-[var(--color-border)] bg-[var(--surface-2)] text-[var(--secondary)]'
+            }`}
+          >
+            {memeEnabled ? 'Meme mode: On' : 'Meme mode: Off'}
+          </button>
+        </div>
+
+        {memeEnabled && (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className="text-sm sm:col-span-2">
+              <span className="mb-1 block font-medium text-[var(--secondary)]">Template selection</span>
+              <select
+                value={memeTemplate}
+                onChange={(e) => {
+                  const nextTemplate = e.target.value as keyof typeof MEME_TEMPLATES;
+                  setMemeTemplate(nextTemplate);
+                  if (nextTemplate !== 'custom') {
+                    onMemeTopTextChange(MEME_TEMPLATES[nextTemplate].top);
+                    onMemeBottomTextChange(MEME_TEMPLATES[nextTemplate].bottom);
+                  }
+                }}
+                className={fieldClass}
+              >
+                <option value="custom">Custom text</option>
+                <option value="standup">Standup chaos</option>
+                <option value="shipit">Ship it energy</option>
+                <option value="sprint">Sprint sarcasm</option>
+              </select>
+            </label>
+
+            <label className="text-sm">
+              <span className="mb-1 block font-medium text-[var(--secondary)]">Top text</span>
+              <input
+                type="text"
+                value={memeTopText}
+                maxLength={120}
+                onChange={(e) => {
+                  setMemeTemplate('custom');
+                  onMemeTopTextChange(e.target.value);
+                }}
+                placeholder="WHEN THE BUILD PASSES"
+                className={fieldClass}
+              />
+            </label>
+
+            <label className="text-sm">
+              <span className="mb-1 block font-medium text-[var(--secondary)]">Bottom text</span>
+              <input
+                type="text"
+                value={memeBottomText}
+                maxLength={120}
+                onChange={(e) => {
+                  setMemeTemplate('custom');
+                  onMemeBottomTextChange(e.target.value);
+                }}
+                placeholder="RIGHT BEFORE DEMO"
+                className={fieldClass}
+              />
+            </label>
+
+            <label className="text-sm sm:col-span-2">
+              <span className="mb-1 block font-medium text-[var(--secondary)]">
+                Text size ({Math.round(memeTextScale * 100)}% of frame height)
+              </span>
+              <input
+                type="range"
+                min={MEME_TEXT_SCALE_MIN}
+                max={MEME_TEXT_SCALE_MAX}
+                step={0.005}
+                value={memeTextScale}
+                onChange={(e) => onMemeTextScaleChange(Number(e.target.value))}
+                className="w-full accent-[var(--link)]"
+              />
+            </label>
+
+            <div className="sm:col-span-2">
+              <p className="text-xs text-[var(--text-muted)]">
+                Tip: Keep captions short and uppercase for classic meme readability.
+              </p>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="rounded-2xl border border-[var(--color-border)] bg-[var(--surface)] p-4">

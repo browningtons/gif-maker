@@ -12,6 +12,8 @@ import {
   TARGET_MIN_FPS,
   TARGET_MIN_COLORS,
   TARGET_WIDTH_SHRINK,
+  MEME_TEXT_SCALE_MIN,
+  MEME_TEXT_SCALE_MAX,
 } from '../types';
 import { estimateGifBytes, estimateHeightForWidth, sleep } from '../utils';
 
@@ -29,6 +31,10 @@ type RenderParams = {
   loopCount: number;
   targetSizeMode: boolean;
   targetSizeMb: number;
+  memeEnabled: boolean;
+  memeTopText: string;
+  memeBottomText: string;
+  memeTextScale: number;
   videoWidth: number;
   videoHeight: number;
 };
@@ -40,6 +46,23 @@ type RenderResult = {
   finalFps: number;
   finalColors: number;
 };
+
+function escapeDrawtextValue(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/:/g, '\\:')
+    .replace(/'/g, "\\'")
+    .replace(/,/g, '\\,')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .replace(/%/g, '\\%')
+    .replace(/\r?\n/g, '\\n');
+}
+
+function clampMemeTextScale(value: number): number {
+  if (!Number.isFinite(value)) return 0.09;
+  return Math.min(MEME_TEXT_SCALE_MAX, Math.max(MEME_TEXT_SCALE_MIN, value));
+}
 
 export function useFFmpeg() {
   const ffmpegRef = useRef(new FFmpeg());
@@ -127,7 +150,8 @@ export function useFFmpeg() {
     async (params: RenderParams): Promise<RenderResult | null> => {
       const {
         file, fps, width, colors, dither, speed, startSec, durationSec,
-        loopCount, targetSizeMode, targetSizeMb, videoWidth, videoHeight,
+        loopCount, targetSizeMode, targetSizeMb, memeEnabled, memeTopText, memeBottomText,
+        memeTextScale, videoWidth, videoHeight,
       } = params;
 
       try {
@@ -153,6 +177,9 @@ export function useFFmpeg() {
         ];
         const speedFilter = speed === 1 ? '' : `,setpts=PTS/${speed}`;
         const targetBytes = Math.max(1, targetSizeMb) * 1024 * 1024;
+        const normalizedTopText = memeTopText.trim();
+        const normalizedBottomText = memeBottomText.trim();
+        const shouldOverlayMeme = memeEnabled && (normalizedTopText.length > 0 || normalizedBottomText.length > 0);
 
         const renderAttempt = async (
           attemptWidth: number,
@@ -163,13 +190,32 @@ export function useFFmpeg() {
           if (cancelRequestedRef.current) throw new Error('Render canceled');
 
           const scaleAndRate = `fps=${attemptFps},scale=${attemptWidth}:-1:flags=lanczos${speedFilter}`;
+          const safeTextScale = clampMemeTextScale(memeTextScale);
+          const fontSizeExpr = `max(18\\,h*${safeTextScale.toFixed(3)})`;
+          const styleBase =
+            `fontcolor=white:bordercolor=black:borderw=max(2\\,h*0.005):fontsize=${fontSizeExpr}:x=(w-text_w)/2`;
+
+          const memeFilters: string[] = [];
+          if (shouldOverlayMeme && normalizedTopText) {
+            memeFilters.push(
+              `drawtext=text='${escapeDrawtextValue(normalizedTopText.toUpperCase())}':${styleBase}:y=max(18\\,h*0.04)`
+            );
+          }
+          if (shouldOverlayMeme && normalizedBottomText) {
+            memeFilters.push(
+              `drawtext=text='${escapeDrawtextValue(normalizedBottomText.toUpperCase())}':${styleBase}:y=h-text_h-max(18\\,h*0.04)`
+            );
+          }
+          const renderedVideoFilter = memeFilters.length > 0
+            ? `${scaleAndRate},${memeFilters.join(',')}`
+            : scaleAndRate;
 
           setStage('palette');
           setStatus(`${attemptLabel} — building palette...`);
           await ffmpeg.exec([
             '-y', '-i', inputName, ...trimArgs,
             '-frames:v', '1', '-update', '1',
-            '-vf', `${scaleAndRate},palettegen=max_colors=${attemptColors}:stats_mode=full`,
+            '-vf', `${renderedVideoFilter},palettegen=max_colors=${attemptColors}:stats_mode=full`,
             paletteName,
           ]);
 
@@ -180,7 +226,7 @@ export function useFFmpeg() {
           await ffmpeg.exec([
             '-y', '-i', inputName, ...trimArgs,
             '-i', paletteName,
-            '-lavfi', `${scaleAndRate}[x];[x][1:v]paletteuse=dither=${dither}:diff_mode=rectangle`,
+            '-lavfi', `${renderedVideoFilter}[x];[x][1:v]paletteuse=dither=${dither}:diff_mode=rectangle`,
             '-loop', String(loopCount),
             outputName,
           ]);

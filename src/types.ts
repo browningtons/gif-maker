@@ -23,6 +23,10 @@ export type PersistedSettings = {
   platform: PlatformKey;
   targetSizeMb: number;
   targetSizeMode: boolean;
+  memeEnabled: boolean;
+  memeTopText: string;
+  memeBottomText: string;
+  memeTextScale: number;
 };
 
 export type VideoMeta = {
@@ -108,6 +112,8 @@ export const SPEED_MAX = 4;
 export const TARGET_SIZE_MIN = 1;
 export const TARGET_SIZE_MAX = 100;
 export const LOOP_MAX = 1000;
+export const MEME_TEXT_SCALE_MIN = 0.05;
+export const MEME_TEXT_SCALE_MAX = 0.16;
 
 // Target size optimization limits
 export const TARGET_MAX_ATTEMPTS = 8;
