@@ -15,6 +15,10 @@ import {
   TARGET_WIDTH_SHRINK,
   OVERLAY_TEXT_SIZE_MIN,
   OVERLAY_TEXT_SIZE_MAX,
+  OVERLAY_BOX_WIDTH_MIN,
+  OVERLAY_BOX_WIDTH_MAX,
+  OVERLAY_BOX_HEIGHT_MIN,
+  OVERLAY_BOX_HEIGHT_MAX,
   OVERLAY_FONT_PROFILES,
 } from '../types';
 import { estimateGifBytes, estimateHeightForWidth, sleep } from '../utils';
@@ -38,6 +42,8 @@ type RenderParams = {
   overlayTextX: number;
   overlayTextY: number;
   overlayTextSizePx: number;
+  overlayBoxWidthPct: number;
+  overlayBoxHeightPx: number;
   overlayTextFont: OverlayFontKey;
   previewFrameCount?: number;
   videoWidth: number;
@@ -72,6 +78,51 @@ function clampFontSizePx(value: number): number {
 function clampUnit(value: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
   return Math.min(1, Math.max(0, value));
+}
+
+function clampOverlayBoxWidthPct(value: number): number {
+  if (!Number.isFinite(value)) return 0.84;
+  return Math.min(OVERLAY_BOX_WIDTH_MAX, Math.max(OVERLAY_BOX_WIDTH_MIN, value));
+}
+
+function clampOverlayBoxHeightPx(value: number): number {
+  if (!Number.isFinite(value)) return 86;
+  return Math.min(OVERLAY_BOX_HEIGHT_MAX, Math.max(OVERLAY_BOX_HEIGHT_MIN, Math.round(value)));
+}
+
+function wrapTextForBox(text: string, boxWidthPx: number, fontSizePx: number, maxLines: number): string {
+  const normalized = text.trim();
+  if (!normalized) return '';
+
+  const charsPerLine = Math.max(6, Math.floor(boxWidthPx / Math.max(7, fontSizePx * 0.56)));
+  const lines: string[] = [];
+  const blocks = normalized.split(/\r?\n/);
+
+  for (const block of blocks) {
+    const words = block.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
+      if (lines.length < maxLines) lines.push('');
+      continue;
+    }
+    let current = '';
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (candidate.length <= charsPerLine) {
+        current = candidate;
+        continue;
+      }
+      if (current) {
+        lines.push(current);
+      }
+      current = word.length > charsPerLine ? `${word.slice(0, Math.max(1, charsPerLine - 1))}\u2026` : word;
+      if (lines.length >= maxLines) break;
+    }
+    if (lines.length >= maxLines) break;
+    if (current) lines.push(current);
+    if (lines.length >= maxLines) break;
+  }
+
+  return lines.slice(0, maxLines).join('\n').trim();
 }
 
 export function useFFmpeg() {
@@ -161,7 +212,8 @@ export function useFFmpeg() {
       const {
         file, fps, width, colors, dither, speed, startSec, durationSec,
         loopCount, targetSizeMode, targetSizeMb, overlayTextEnabled, overlayText, overlayTextX, overlayTextY,
-        overlayTextSizePx, overlayTextFont, previewFrameCount, videoWidth, videoHeight,
+        overlayTextSizePx, overlayBoxWidthPct, overlayBoxHeightPx, overlayTextFont,
+        previewFrameCount, videoWidth, videoHeight,
       } = params;
 
       try {
@@ -189,9 +241,11 @@ export function useFFmpeg() {
         const targetBytes = Math.max(1, targetSizeMb) * 1024 * 1024;
         const normalizedFloatingText = overlayText.trim();
         const shouldOverlayFloatingText = overlayTextEnabled && normalizedFloatingText.length > 0;
-        const safeOverlayX = clampUnit(overlayTextX, 0.5);
-        const safeOverlayY = clampUnit(overlayTextY, 0.15);
+        const safeOverlayXRaw = clampUnit(overlayTextX, 0.08);
+        const safeOverlayYRaw = clampUnit(overlayTextY, 0.12);
         const safeOverlayTextSizePx = clampFontSizePx(overlayTextSizePx);
+        const safeOverlayBoxWidthPct = clampOverlayBoxWidthPct(overlayBoxWidthPct);
+        const safeOverlayBoxHeightPx = clampOverlayBoxHeightPx(overlayBoxHeightPx);
         const ffmpegFontFamily = OVERLAY_FONT_PROFILES[overlayTextFont]?.ffmpegFamily;
         const safePreviewFrameCount =
           Number.isFinite(previewFrameCount) && previewFrameCount !== undefined
@@ -207,20 +261,38 @@ export function useFFmpeg() {
           if (cancelRequestedRef.current) throw new Error('Render canceled');
 
           const scaleAndRate = `fps=${attemptFps},scale=${attemptWidth}:-1:flags=lanczos${speedFilter}`;
+          const attemptHeight = estimateHeightForWidth(attemptWidth, videoWidth, videoHeight);
+          const maxOverlayX = Math.max(0, 1 - safeOverlayBoxWidthPct);
+          const maxOverlayY = Math.max(
+            0,
+            1 - Math.min(1, safeOverlayBoxHeightPx / Math.max(1, attemptHeight))
+          );
+          const safeOverlayX = Math.min(maxOverlayX, safeOverlayXRaw);
+          const safeOverlayY = Math.min(maxOverlayY, safeOverlayYRaw);
+          const wrappedFloatingText = shouldOverlayFloatingText
+            ? wrapTextForBox(
+                normalizedFloatingText,
+                Math.round(attemptWidth * safeOverlayBoxWidthPct),
+                safeOverlayTextSizePx,
+                Math.max(1, Math.floor(safeOverlayBoxHeightPx / Math.max(14, safeOverlayTextSizePx * 1.18)))
+              )
+            : '';
+          const hasFloatingText = wrappedFloatingText.length > 0;
 
           const floatingTextStyle = [
-            `text='${escapeDrawtextValue(normalizedFloatingText)}'`,
+            `text='${escapeDrawtextValue(wrappedFloatingText)}'`,
             'fontcolor=white',
             'borderw=3',
             'bordercolor=black',
             `fontsize=${safeOverlayTextSizePx}`,
-            `x=(w-text_w)*${safeOverlayX.toFixed(4)}`,
-            `y=(h-text_h)*${safeOverlayY.toFixed(4)}`,
+            `line_spacing=${Math.max(2, Math.round(safeOverlayTextSizePx * 0.16))}`,
+            `x=w*${safeOverlayX.toFixed(4)}`,
+            `y=h*${safeOverlayY.toFixed(4)}`,
           ];
 
           const composeVideoFilter = (includeFloatingText: boolean, includeFloatingFont: boolean) => {
             const parts: string[] = [scaleAndRate];
-            if (includeFloatingText && shouldOverlayFloatingText) {
+            if (includeFloatingText && hasFloatingText) {
               const floatingPrefix = includeFloatingFont && ffmpegFontFamily
                 ? [`font=${ffmpegFontFamily}`]
                 : [];
@@ -261,7 +333,7 @@ export function useFFmpeg() {
           const withFontFilter = composeVideoFilter(true, true);
           const withoutFontFilter = composeVideoFilter(true, false);
           const noTextFilter = scaleAndRate;
-          const hasAnyTextOverlay = shouldOverlayFloatingText;
+          const hasAnyTextOverlay = hasFloatingText;
 
           if (!hasAnyTextOverlay) {
             return executeWithFilter(noTextFilter);

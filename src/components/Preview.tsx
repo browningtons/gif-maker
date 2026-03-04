@@ -1,5 +1,14 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { OVERLAY_TEXT_SIZE_MAX, OVERLAY_TEXT_SIZE_MIN, type OverlayFontKey, OVERLAY_FONT_PROFILES } from '../types';
+import {
+  OVERLAY_TEXT_SIZE_MAX,
+  OVERLAY_TEXT_SIZE_MIN,
+  OVERLAY_BOX_WIDTH_MIN,
+  OVERLAY_BOX_WIDTH_MAX,
+  OVERLAY_BOX_HEIGHT_MIN,
+  OVERLAY_BOX_HEIGHT_MAX,
+  type OverlayFontKey,
+  OVERLAY_FONT_PROFILES,
+} from '../types';
 
 type PreviewProps = {
   gifUrl: string | null;
@@ -11,11 +20,15 @@ type PreviewProps = {
   overlayX: number;
   overlayY: number;
   overlayFontSizePx: number;
+  overlayBoxWidthPct: number;
+  overlayBoxHeightPx: number;
   overlayFont: OverlayFontKey;
   onOverlayEnabledChange: (value: boolean) => void;
   onOverlayTextChange: (value: string) => void;
   onOverlayPositionChange: (x: number, y: number) => void;
   onOverlayFontSizeChange: (value: number) => void;
+  onOverlayBoxWidthChange: (value: number) => void;
+  onOverlayBoxHeightChange: (value: number) => void;
   onOverlayFontChange: (value: OverlayFontKey) => void;
 };
 
@@ -34,39 +47,39 @@ export function Preview({
   overlayX,
   overlayY,
   overlayFontSizePx,
+  overlayBoxWidthPct,
+  overlayBoxHeightPx,
   overlayFont,
   onOverlayEnabledChange,
   onOverlayTextChange,
   onOverlayPositionChange,
   onOverlayFontSizeChange,
+  onOverlayBoxWidthChange,
+  onOverlayBoxHeightChange,
   onOverlayFontChange,
 }: PreviewProps) {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [isDraggingOverlay, setIsDraggingOverlay] = useState(false);
   const previewFrameRef = useRef<HTMLDivElement | null>(null);
+  const [previewSize, setPreviewSize] = useState({ width: 0, height: 0 });
 
   const previewUrl = gifUrl ?? sourcePreviewUrl;
   const hasPreview = Boolean(previewUrl);
 
   useEffect(() => {
-    if (!isDraggingOverlay) return;
-    const handlePointerMove = (event: PointerEvent) => {
-      const frame = previewFrameRef.current;
-      if (!frame) return;
-      const rect = frame.getBoundingClientRect();
-      if (rect.width <= 0 || rect.height <= 0) return;
-      const x = clampUnit((event.clientX - rect.left) / rect.width);
-      const y = clampUnit((event.clientY - rect.top) / rect.height);
-      onOverlayPositionChange(x, y);
-    };
-    const handlePointerUp = () => setIsDraggingOverlay(false);
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-    };
-  }, [isDraggingOverlay, onOverlayPositionChange]);
+    const frame = previewFrameRef.current;
+    if (!frame || typeof window === 'undefined') return;
+    const observer = new window.ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (!rect) return;
+      setPreviewSize({
+        width: rect.width,
+        height: rect.height,
+      });
+    });
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, []);
 
   const handleCopyToClipboard = useCallback(async (silent = false) => {
     if (!gifUrl) return;
@@ -132,6 +145,47 @@ export function Preview({
     OVERLAY_TEXT_SIZE_MIN,
     Math.min(OVERLAY_TEXT_SIZE_MAX, Math.round(overlayFontSizePx))
   );
+  const clampedBoxWidthPct = Math.max(
+    OVERLAY_BOX_WIDTH_MIN,
+    Math.min(OVERLAY_BOX_WIDTH_MAX, overlayBoxWidthPct)
+  );
+  const clampedBoxHeightPx = Math.max(
+    OVERLAY_BOX_HEIGHT_MIN,
+    Math.min(OVERLAY_BOX_HEIGHT_MAX, Math.round(overlayBoxHeightPx))
+  );
+  const maxOverlayX = Math.max(0, 1 - clampedBoxWidthPct);
+  const maxOverlayY = Math.max(
+    0,
+    1 - (previewSize.height > 0 ? Math.min(1, clampedBoxHeightPx / previewSize.height) : 0)
+  );
+
+  useEffect(() => {
+    const safeX = Math.min(maxOverlayX, clampUnit(overlayX));
+    const safeY = Math.min(maxOverlayY, clampUnit(overlayY));
+    if (safeX !== overlayX || safeY !== overlayY) {
+      onOverlayPositionChange(safeX, safeY);
+    }
+  }, [maxOverlayX, maxOverlayY, onOverlayPositionChange, overlayX, overlayY]);
+
+  useEffect(() => {
+    if (!isDraggingOverlay) return;
+    const handlePointerMove = (event: PointerEvent) => {
+      const frame = previewFrameRef.current;
+      if (!frame) return;
+      const rect = frame.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const x = Math.min(maxOverlayX, clampUnit((event.clientX - rect.left) / rect.width));
+      const y = Math.min(maxOverlayY, clampUnit((event.clientY - rect.top) / rect.height));
+      onOverlayPositionChange(x, y);
+    };
+    const handlePointerUp = () => setIsDraggingOverlay(false);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [isDraggingOverlay, maxOverlayX, maxOverlayY, onOverlayPositionChange]);
 
   return (
     <aside className="rounded-[var(--radius)] border border-[var(--color-border-subtle)] bg-[var(--surface)] p-6 shadow-[var(--shadow)]">
@@ -159,25 +213,30 @@ export function Preview({
                     const rect = previewFrameRef.current.getBoundingClientRect();
                     if (rect.width > 0 && rect.height > 0) {
                       onOverlayPositionChange(
-                        clampUnit((event.clientX - rect.left) / rect.width),
-                        clampUnit((event.clientY - rect.top) / rect.height)
+                        Math.min(maxOverlayX, clampUnit((event.clientX - rect.left) / rect.width)),
+                        Math.min(maxOverlayY, clampUnit((event.clientY - rect.top) / rect.height))
                       );
                     }
                   }
                 }}
                 onKeyDown={(event) => {
                   const step = event.shiftKey ? 0.04 : 0.015;
-                  if (event.key === 'ArrowLeft') onOverlayPositionChange(clampUnit(overlayX - step), overlayY);
-                  if (event.key === 'ArrowRight') onOverlayPositionChange(clampUnit(overlayX + step), overlayY);
-                  if (event.key === 'ArrowUp') onOverlayPositionChange(overlayX, clampUnit(overlayY - step));
-                  if (event.key === 'ArrowDown') onOverlayPositionChange(overlayX, clampUnit(overlayY + step));
+                  if (event.key === 'ArrowLeft') onOverlayPositionChange(Math.min(maxOverlayX, clampUnit(overlayX - step)), overlayY);
+                  if (event.key === 'ArrowRight') onOverlayPositionChange(Math.min(maxOverlayX, clampUnit(overlayX + step)), overlayY);
+                  if (event.key === 'ArrowUp') onOverlayPositionChange(overlayX, Math.min(maxOverlayY, clampUnit(overlayY - step)));
+                  if (event.key === 'ArrowDown') onOverlayPositionChange(overlayX, Math.min(maxOverlayY, clampUnit(overlayY + step)));
                 }}
-                className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-center text-white shadow-[0_1px_2px_rgba(0,0,0,0.7)] ${
+                className={`absolute rounded-md px-2 py-1 text-left text-white shadow-[0_1px_2px_rgba(0,0,0,0.7)] ${
                   isDraggingOverlay ? 'cursor-grabbing' : 'cursor-grab'
                 }`}
                 style={{
-                  left: `${clampUnit(overlayX) * 100}%`,
-                  top: `${clampUnit(overlayY) * 100}%`,
+                  left: `${Math.min(maxOverlayX, clampUnit(overlayX)) * 100}%`,
+                  top: `${Math.min(maxOverlayY, clampUnit(overlayY)) * 100}%`,
+                  width: `${clampedBoxWidthPct * 100}%`,
+                  minHeight: `${clampedBoxHeightPx}px`,
+                  maxWidth: `${clampedBoxWidthPct * 100}%`,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
                   fontFamily: OVERLAY_FONT_PROFILES[overlayFont].cssFamily,
                   fontSize: `${clampedOverlaySize}px`,
                   lineHeight: 1.1,
@@ -247,6 +306,36 @@ export function Preview({
               step={1}
               value={clampedOverlaySize}
               onChange={(event) => onOverlayFontSizeChange(Number(event.target.value))}
+              className="w-full accent-[var(--link)]"
+            />
+          </label>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block text-sm">
+            <span className="mb-1 block text-xs font-medium text-[var(--secondary)]">
+              Box width ({Math.round(clampedBoxWidthPct * 100)}%)
+            </span>
+            <input
+              type="range"
+              min={OVERLAY_BOX_WIDTH_MIN}
+              max={OVERLAY_BOX_WIDTH_MAX}
+              step={0.01}
+              value={clampedBoxWidthPct}
+              onChange={(event) => onOverlayBoxWidthChange(Number(event.target.value))}
+              className="w-full accent-[var(--link)]"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-xs font-medium text-[var(--secondary)]">
+              Box height ({clampedBoxHeightPx}px)
+            </span>
+            <input
+              type="range"
+              min={OVERLAY_BOX_HEIGHT_MIN}
+              max={OVERLAY_BOX_HEIGHT_MAX}
+              step={1}
+              value={clampedBoxHeightPx}
+              onChange={(event) => onOverlayBoxHeightChange(Number(event.target.value))}
               className="w-full accent-[var(--link)]"
             />
           </label>

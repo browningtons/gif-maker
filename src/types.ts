@@ -119,6 +119,10 @@ export const TARGET_SIZE_MAX = 100;
 export const LOOP_MAX = 1000;
 export const OVERLAY_TEXT_SIZE_MIN = 16;
 export const OVERLAY_TEXT_SIZE_MAX = 120;
+export const OVERLAY_BOX_WIDTH_MIN = 0.2;
+export const OVERLAY_BOX_WIDTH_MAX = 1;
+export const OVERLAY_BOX_HEIGHT_MIN = 28;
+export const OVERLAY_BOX_HEIGHT_MAX = 360;
 
 // Target size optimization limits
 export const TARGET_MAX_ATTEMPTS = 8;

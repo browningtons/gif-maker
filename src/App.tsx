@@ -30,9 +30,11 @@ function App() {
   const lastGifUrlRef = useRef<string | null>(null);
   const [overlayTextEnabled, setOverlayTextEnabled] = useState(true);
   const [overlayText, setOverlayText] = useState('');
-  const [overlayTextX, setOverlayTextX] = useState(0.5);
-  const [overlayTextY, setOverlayTextY] = useState(0.15);
+  const [overlayTextX, setOverlayTextX] = useState(0.08);
+  const [overlayTextY, setOverlayTextY] = useState(0.12);
   const [overlayTextSizePx, setOverlayTextSizePx] = useState(36);
+  const [overlayBoxWidthPct, setOverlayBoxWidthPct] = useState(0.84);
+  const [overlayBoxHeightPx, setOverlayBoxHeightPx] = useState(86);
   const [overlayTextFont, setOverlayTextFont] = useState<OverlayFontKey>('meme');
 
   const ffmpeg = useFFmpeg();
@@ -145,6 +147,8 @@ function App() {
       overlayTextX,
       overlayTextY,
       overlayTextSizePx,
+      overlayBoxWidthPct,
+      overlayBoxHeightPx,
       overlayTextFont,
       videoWidth: videoMeta.width,
       videoHeight: videoMeta.height,
@@ -155,7 +159,8 @@ function App() {
   }, [file, settings.fps, settings.width, settings.colors, settings.dither,
       settings.speed, settings.startSec, settings.durationSec, settings.loopCount,
       settings.targetSizeMode, settings.targetSizeMb,
-      overlayTextEnabled, overlayText, overlayTextX, overlayTextY, overlayTextSizePx, overlayTextFont,
+      overlayTextEnabled, overlayText, overlayTextX, overlayTextY, overlayTextSizePx,
+      overlayBoxWidthPct, overlayBoxHeightPx, overlayTextFont,
       videoMeta.width, videoMeta.height,
       ffmpeg.generateGif, ffmpeg.setStatus, timeToFirstGifMs]);
 
@@ -184,6 +189,8 @@ function App() {
       overlayTextX,
       overlayTextY,
       overlayTextSizePx,
+      overlayBoxWidthPct,
+      overlayBoxHeightPx,
       overlayTextFont,
       previewFrameCount: 6,
       videoWidth: videoMeta.width,
@@ -195,7 +202,8 @@ function App() {
   }, [
     file, settings.fps, settings.width, settings.colors, settings.dither, settings.speed,
     settings.startSec, settings.durationSec, settings.loopCount, settings.targetSizeMb,
-    overlayTextEnabled, overlayText, overlayTextX, overlayTextY, overlayTextSizePx, overlayTextFont,
+    overlayTextEnabled, overlayText, overlayTextX, overlayTextY, overlayTextSizePx,
+    overlayBoxWidthPct, overlayBoxHeightPx, overlayTextFont,
     videoMeta.width, videoMeta.height, ffmpeg.generateGif, ffmpeg.setStatus, timeToFirstGifMs,
   ]);
 
@@ -311,6 +319,8 @@ function App() {
             overlayX={overlayTextX}
             overlayY={overlayTextY}
             overlayFontSizePx={overlayTextSizePx}
+            overlayBoxWidthPct={overlayBoxWidthPct}
+            overlayBoxHeightPx={overlayBoxHeightPx}
             overlayFont={overlayTextFont}
             onOverlayEnabledChange={setOverlayTextEnabled}
             onOverlayTextChange={setOverlayText}
@@ -319,6 +329,8 @@ function App() {
               setOverlayTextY(y);
             }}
             onOverlayFontSizeChange={setOverlayTextSizePx}
+            onOverlayBoxWidthChange={setOverlayBoxWidthPct}
+            onOverlayBoxHeightChange={setOverlayBoxHeightPx}
             onOverlayFontChange={setOverlayTextFont}
           />
         </section>
