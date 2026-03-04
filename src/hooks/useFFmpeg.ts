@@ -286,7 +286,7 @@ export function useFFmpeg() {
             'bordercolor=black',
             `fontsize=${safeOverlayTextSizePx}`,
             `line_spacing=${Math.max(2, Math.round(safeOverlayTextSizePx * 0.16))}`,
-            `x=w*${safeOverlayX.toFixed(4)}`,
+            `x=(w*${safeOverlayX.toFixed(4)})+((w*${safeOverlayBoxWidthPct.toFixed(4)})-text_w)/2`,
             `y=h*${safeOverlayY.toFixed(4)}`,
           ];
 

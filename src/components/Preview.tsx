@@ -226,7 +226,7 @@ export function Preview({
                   if (event.key === 'ArrowUp') onOverlayPositionChange(overlayX, Math.min(maxOverlayY, clampUnit(overlayY - step)));
                   if (event.key === 'ArrowDown') onOverlayPositionChange(overlayX, Math.min(maxOverlayY, clampUnit(overlayY + step)));
                 }}
-                className={`absolute rounded-md px-2 py-1 text-left text-white shadow-[0_1px_2px_rgba(0,0,0,0.7)] ${
+                className={`absolute rounded-md px-2 py-1 text-center text-white shadow-[0_1px_2px_rgba(0,0,0,0.7)] ${
                   isDraggingOverlay ? 'cursor-grabbing' : 'cursor-grab'
                 }`}
                 style={{
@@ -242,6 +242,7 @@ export function Preview({
                   lineHeight: 1.1,
                   fontWeight: overlayFont === 'mono' ? 700 : 800,
                   textShadow: '2px 2px 0 #000, -2px 2px 0 #000, 2px -2px 0 #000, -2px -2px 0 #000',
+                  textAlign: 'center',
                 }}
               >
                 {overlayText}
