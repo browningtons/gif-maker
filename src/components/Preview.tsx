@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { type OverlayFontKey, OVERLAY_FONT_PROFILES } from '../types';
+import { OVERLAY_TEXT_SIZE_MAX, OVERLAY_TEXT_SIZE_MIN, type OverlayFontKey, OVERLAY_FONT_PROFILES } from '../types';
 
 type PreviewProps = {
   gifUrl: string | null;
@@ -10,12 +10,12 @@ type PreviewProps = {
   overlayText: string;
   overlayX: number;
   overlayY: number;
-  overlayScale: number;
+  overlayFontSizePx: number;
   overlayFont: OverlayFontKey;
   onOverlayEnabledChange: (value: boolean) => void;
   onOverlayTextChange: (value: string) => void;
   onOverlayPositionChange: (x: number, y: number) => void;
-  onOverlayScaleChange: (value: number) => void;
+  onOverlayFontSizeChange: (value: number) => void;
   onOverlayFontChange: (value: OverlayFontKey) => void;
 };
 
@@ -33,32 +33,20 @@ export function Preview({
   overlayText,
   overlayX,
   overlayY,
-  overlayScale,
+  overlayFontSizePx,
   overlayFont,
   onOverlayEnabledChange,
   onOverlayTextChange,
   onOverlayPositionChange,
-  onOverlayScaleChange,
+  onOverlayFontSizeChange,
   onOverlayFontChange,
 }: PreviewProps) {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [isDraggingOverlay, setIsDraggingOverlay] = useState(false);
-  const [previewHeight, setPreviewHeight] = useState(0);
   const previewFrameRef = useRef<HTMLDivElement | null>(null);
 
   const previewUrl = gifUrl ?? sourcePreviewUrl;
   const hasPreview = Boolean(previewUrl);
-
-  useEffect(() => {
-    const frame = previewFrameRef.current;
-    if (!frame || typeof window === 'undefined') return;
-    const observer = new window.ResizeObserver((entries) => {
-      const nextHeight = entries[0]?.contentRect.height ?? 0;
-      setPreviewHeight(nextHeight);
-    });
-    observer.observe(frame);
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     if (!isDraggingOverlay) return;
@@ -140,7 +128,10 @@ export function Preview({
     return name.endsWith('.gif') ? name : `${name}.gif`;
   };
 
-  const overlayFontPx = Math.max(16, Math.round(Math.max(0, previewHeight) * overlayScale));
+  const clampedOverlaySize = Math.max(
+    OVERLAY_TEXT_SIZE_MIN,
+    Math.min(OVERLAY_TEXT_SIZE_MAX, Math.round(overlayFontSizePx))
+  );
 
   return (
     <aside className="rounded-[var(--radius)] border border-[var(--color-border-subtle)] bg-[var(--surface)] p-6 shadow-[var(--shadow)]">
@@ -188,7 +179,7 @@ export function Preview({
                   left: `${clampUnit(overlayX) * 100}%`,
                   top: `${clampUnit(overlayY) * 100}%`,
                   fontFamily: OVERLAY_FONT_PROFILES[overlayFont].cssFamily,
-                  fontSize: `${overlayFontPx}px`,
+                  fontSize: `${clampedOverlaySize}px`,
                   lineHeight: 1.1,
                   fontWeight: overlayFont === 'mono' ? 700 : 800,
                   textShadow: '2px 2px 0 #000, -2px 2px 0 #000, 2px -2px 0 #000, -2px -2px 0 #000',
@@ -239,19 +230,23 @@ export function Preview({
               <option value="sans">{OVERLAY_FONT_PROFILES.sans.label}</option>
               <option value="serif">{OVERLAY_FONT_PROFILES.serif.label}</option>
               <option value="mono">{OVERLAY_FONT_PROFILES.mono.label}</option>
+              <option value="display">{OVERLAY_FONT_PROFILES.display.label}</option>
+              <option value="rounded">{OVERLAY_FONT_PROFILES.rounded.label}</option>
+              <option value="comic">{OVERLAY_FONT_PROFILES.comic.label}</option>
+              <option value="elegant">{OVERLAY_FONT_PROFILES.elegant.label}</option>
             </select>
           </label>
           <label className="block text-sm">
             <span className="mb-1 block text-xs font-medium text-[var(--secondary)]">
-              Size ({Math.round(overlayScale * 100)}% of frame)
+              Font size ({clampedOverlaySize}px)
             </span>
             <input
               type="range"
-              min={0.05}
-              max={0.16}
-              step={0.005}
-              value={overlayScale}
-              onChange={(event) => onOverlayScaleChange(Number(event.target.value))}
+              min={OVERLAY_TEXT_SIZE_MIN}
+              max={OVERLAY_TEXT_SIZE_MAX}
+              step={1}
+              value={clampedOverlaySize}
+              onChange={(event) => onOverlayFontSizeChange(Number(event.target.value))}
               className="w-full accent-[var(--link)]"
             />
           </label>

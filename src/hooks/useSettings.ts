@@ -20,8 +20,6 @@ import {
   TARGET_SIZE_MIN,
   TARGET_SIZE_MAX,
   LOOP_MAX,
-  MEME_TEXT_SCALE_MIN,
-  MEME_TEXT_SCALE_MAX,
 } from '../types';
 import { clamp, readPersistedSettings } from '../utils';
 
@@ -66,12 +64,6 @@ export function useSettings() {
     )
   );
   const [targetSizeMode, setTargetSizeMode] = useState(persisted.targetSizeMode ?? true);
-  const [memeEnabled, setMemeEnabled] = useState(persisted.memeEnabled ?? false);
-  const [memeTopText, setMemeTopText] = useState(persisted.memeTopText ?? '');
-  const [memeBottomText, setMemeBottomText] = useState(persisted.memeBottomText ?? '');
-  const [memeTextScale, setMemeTextScale] = useState(
-    clamp(persisted.memeTextScale ?? 0.09, MEME_TEXT_SCALE_MIN, MEME_TEXT_SCALE_MAX, 0.09)
-  );
 
   // Persist settings to localStorage
   useEffect(() => {
@@ -95,15 +87,10 @@ export function useSettings() {
         PLATFORM_PROFILES.linkedin.targetMb
       ),
       targetSizeMode,
-      memeEnabled,
-      memeTopText,
-      memeBottomText,
-      memeTextScale: clamp(memeTextScale, MEME_TEXT_SCALE_MIN, MEME_TEXT_SCALE_MAX, 0.09),
     };
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(snapshot));
   }, [
     colors, dither, durationSec, fps, isDark, loopCount,
-    memeBottomText, memeEnabled, memeTextScale, memeTopText,
     platform, preset, speed, startSec, targetSizeMb, targetSizeMode, width,
   ]);
 
@@ -136,10 +123,6 @@ export function useSettings() {
     setPlatform('linkedin');
     setTargetSizeMb(PLATFORM_PROFILES.linkedin.targetMb);
     setTargetSizeMode(true);
-    setMemeEnabled(false);
-    setMemeTopText('');
-    setMemeBottomText('');
-    setMemeTextScale(0.09);
   };
 
   const clampTrim = (nextStart: number, nextDuration: number, videoDuration: number) => {
@@ -170,10 +153,6 @@ export function useSettings() {
     platform, setPlatform,
     targetSizeMb, setTargetSizeMb,
     targetSizeMode, setTargetSizeMode,
-    memeEnabled, setMemeEnabled,
-    memeTopText, setMemeTopText,
-    memeBottomText, setMemeBottomText,
-    memeTextScale, setMemeTextScale,
     restoreDefaults,
     clampTrim,
   };

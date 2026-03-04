@@ -65,14 +65,6 @@ export function readPersistedSettings(): Partial<PersistedSettings> {
         typeof data.targetSizeMb === 'number' ? data.targetSizeMb : undefined,
       targetSizeMode:
         typeof data.targetSizeMode === 'boolean' ? data.targetSizeMode : undefined,
-      memeEnabled:
-        typeof data.memeEnabled === 'boolean' ? data.memeEnabled : undefined,
-      memeTopText:
-        typeof data.memeTopText === 'string' ? data.memeTopText : undefined,
-      memeBottomText:
-        typeof data.memeBottomText === 'string' ? data.memeBottomText : undefined,
-      memeTextScale:
-        typeof data.memeTextScale === 'number' ? data.memeTextScale : undefined,
     };
   } catch {
     return {};

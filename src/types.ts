@@ -1,7 +1,15 @@
 export type PresetKey = 'ultra' | 'balanced' | 'compact';
 export type PlatformKey = 'linkedin' | 'x' | 'instagram' | 'facebook' | 'tiktok' | 'custom';
 export type DitherKey = 'none' | 'bayer' | 'floyd_steinberg' | 'sierra2' | 'sierra2_4a';
-export type OverlayFontKey = 'meme' | 'sans' | 'serif' | 'mono';
+export type OverlayFontKey =
+  | 'meme'
+  | 'sans'
+  | 'serif'
+  | 'mono'
+  | 'display'
+  | 'rounded'
+  | 'comic'
+  | 'elegant';
 
 export type Settings = {
   fps: number;
@@ -24,10 +32,6 @@ export type PersistedSettings = {
   platform: PlatformKey;
   targetSizeMb: number;
   targetSizeMode: boolean;
-  memeEnabled: boolean;
-  memeTopText: string;
-  memeBottomText: string;
-  memeTextScale: number;
 };
 
 export type VideoMeta = {
@@ -113,8 +117,8 @@ export const SPEED_MAX = 4;
 export const TARGET_SIZE_MIN = 1;
 export const TARGET_SIZE_MAX = 100;
 export const LOOP_MAX = 1000;
-export const MEME_TEXT_SCALE_MIN = 0.05;
-export const MEME_TEXT_SCALE_MAX = 0.16;
+export const OVERLAY_TEXT_SIZE_MIN = 16;
+export const OVERLAY_TEXT_SIZE_MAX = 120;
 
 // Target size optimization limits
 export const TARGET_MAX_ATTEMPTS = 8;
@@ -154,5 +158,25 @@ export const OVERLAY_FONT_PROFILES: Record<
     label: 'Code mono',
     cssFamily: '"Courier New", monospace',
     ffmpegFamily: 'Monospace',
+  },
+  display: {
+    label: 'Display black',
+    cssFamily: '"Arial Black", "Segoe UI", sans-serif',
+    ffmpegFamily: 'Sans',
+  },
+  rounded: {
+    label: 'Rounded',
+    cssFamily: '"Arial Rounded MT Bold", "Trebuchet MS", sans-serif',
+    ffmpegFamily: 'Sans',
+  },
+  comic: {
+    label: 'Comic',
+    cssFamily: '"Comic Sans MS", "Marker Felt", cursive',
+    ffmpegFamily: 'Sans',
+  },
+  elegant: {
+    label: 'Elegant serif',
+    cssFamily: '"Palatino Linotype", Palatino, serif',
+    ffmpegFamily: 'Serif',
   },
 };

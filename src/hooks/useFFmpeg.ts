@@ -13,8 +13,8 @@ import {
   TARGET_MIN_FPS,
   TARGET_MIN_COLORS,
   TARGET_WIDTH_SHRINK,
-  MEME_TEXT_SCALE_MIN,
-  MEME_TEXT_SCALE_MAX,
+  OVERLAY_TEXT_SIZE_MIN,
+  OVERLAY_TEXT_SIZE_MAX,
   OVERLAY_FONT_PROFILES,
 } from '../types';
 import { estimateGifBytes, estimateHeightForWidth, sleep } from '../utils';
@@ -33,15 +33,11 @@ type RenderParams = {
   loopCount: number;
   targetSizeMode: boolean;
   targetSizeMb: number;
-  memeEnabled: boolean;
-  memeTopText: string;
-  memeBottomText: string;
-  memeTextScale: number;
   overlayTextEnabled: boolean;
   overlayText: string;
   overlayTextX: number;
   overlayTextY: number;
-  overlayTextScale: number;
+  overlayTextSizePx: number;
   overlayTextFont: OverlayFontKey;
   previewFrameCount?: number;
   videoWidth: number;
@@ -68,9 +64,9 @@ function escapeDrawtextValue(value: string): string {
     .replace(/\r?\n/g, '\\n');
 }
 
-function clampMemeTextScale(value: number): number {
-  if (!Number.isFinite(value)) return 0.09;
-  return Math.min(MEME_TEXT_SCALE_MAX, Math.max(MEME_TEXT_SCALE_MIN, value));
+function clampFontSizePx(value: number): number {
+  if (!Number.isFinite(value)) return 36;
+  return Math.min(OVERLAY_TEXT_SIZE_MAX, Math.max(OVERLAY_TEXT_SIZE_MIN, Math.round(value)));
 }
 
 function clampUnit(value: number, fallback: number): number {
@@ -164,9 +160,8 @@ export function useFFmpeg() {
     async (params: RenderParams): Promise<RenderResult | null> => {
       const {
         file, fps, width, colors, dither, speed, startSec, durationSec,
-        loopCount, targetSizeMode, targetSizeMb, memeEnabled, memeTopText, memeBottomText,
-        memeTextScale, overlayTextEnabled, overlayText, overlayTextX, overlayTextY,
-        overlayTextScale, overlayTextFont, previewFrameCount, videoWidth, videoHeight,
+        loopCount, targetSizeMode, targetSizeMb, overlayTextEnabled, overlayText, overlayTextX, overlayTextY,
+        overlayTextSizePx, overlayTextFont, previewFrameCount, videoWidth, videoHeight,
       } = params;
 
       try {
@@ -192,14 +187,11 @@ export function useFFmpeg() {
         ];
         const speedFilter = speed === 1 ? '' : `,setpts=PTS/${speed}`;
         const targetBytes = Math.max(1, targetSizeMb) * 1024 * 1024;
-        const normalizedTopText = memeTopText.trim();
-        const normalizedBottomText = memeBottomText.trim();
-        const shouldOverlayMeme = memeEnabled && (normalizedTopText.length > 0 || normalizedBottomText.length > 0);
         const normalizedFloatingText = overlayText.trim();
         const shouldOverlayFloatingText = overlayTextEnabled && normalizedFloatingText.length > 0;
         const safeOverlayX = clampUnit(overlayTextX, 0.5);
         const safeOverlayY = clampUnit(overlayTextY, 0.15);
-        const safeOverlayScale = clampMemeTextScale(overlayTextScale);
+        const safeOverlayTextSizePx = clampFontSizePx(overlayTextSizePx);
         const ffmpegFontFamily = OVERLAY_FONT_PROFILES[overlayTextFont]?.ffmpegFamily;
         const safePreviewFrameCount =
           Number.isFinite(previewFrameCount) && previewFrameCount !== undefined
@@ -215,35 +207,19 @@ export function useFFmpeg() {
           if (cancelRequestedRef.current) throw new Error('Render canceled');
 
           const scaleAndRate = `fps=${attemptFps},scale=${attemptWidth}:-1:flags=lanczos${speedFilter}`;
-          const safeTextScale = clampMemeTextScale(memeTextScale);
-          const fontSizeExpr = `max(18\\,h*${safeTextScale.toFixed(3)})`;
-          const styleBase =
-            `fontcolor=white:bordercolor=black:borderw=3:fontsize=${fontSizeExpr}:x=(w-text_w)/2`;
-
-          const memeFilters: string[] = [];
-          if (shouldOverlayMeme && normalizedTopText) {
-            memeFilters.push(
-              `drawtext=text='${escapeDrawtextValue(normalizedTopText.toUpperCase())}':${styleBase}:y=max(18\\,h*0.04)`
-            );
-          }
-          if (shouldOverlayMeme && normalizedBottomText) {
-            memeFilters.push(
-              `drawtext=text='${escapeDrawtextValue(normalizedBottomText.toUpperCase())}':${styleBase}:y=h-text_h-max(18\\,h*0.04)`
-            );
-          }
 
           const floatingTextStyle = [
             `text='${escapeDrawtextValue(normalizedFloatingText)}'`,
             'fontcolor=white',
             'borderw=3',
             'bordercolor=black',
-            `fontsize=max(16\\,h*${safeOverlayScale.toFixed(3)})`,
+            `fontsize=${safeOverlayTextSizePx}`,
             `x=(w-text_w)*${safeOverlayX.toFixed(4)}`,
             `y=(h-text_h)*${safeOverlayY.toFixed(4)}`,
           ];
 
           const composeVideoFilter = (includeFloatingText: boolean, includeFloatingFont: boolean) => {
-            const parts: string[] = [scaleAndRate, ...memeFilters];
+            const parts: string[] = [scaleAndRate];
             if (includeFloatingText && shouldOverlayFloatingText) {
               const floatingPrefix = includeFloatingFont && ffmpegFontFamily
                 ? [`font=${ffmpegFontFamily}`]
@@ -284,9 +260,8 @@ export function useFFmpeg() {
 
           const withFontFilter = composeVideoFilter(true, true);
           const withoutFontFilter = composeVideoFilter(true, false);
-          const noFloatingFilter = composeVideoFilter(false, false);
           const noTextFilter = scaleAndRate;
-          const hasAnyTextOverlay = memeFilters.length > 0 || shouldOverlayFloatingText;
+          const hasAnyTextOverlay = shouldOverlayFloatingText;
 
           if (!hasAnyTextOverlay) {
             return executeWithFilter(noTextFilter);
@@ -303,14 +278,6 @@ export function useFFmpeg() {
             return await executeWithFilter(withoutFontFilter);
           } catch (textErr) {
             if (cancelRequestedRef.current) throw textErr;
-            if (shouldOverlayFloatingText) {
-              try {
-                setStatus(`${attemptLabel} — rendering without draggable text (fallback).`);
-                return await executeWithFilter(noFloatingFilter);
-              } catch (memeErr) {
-                if (cancelRequestedRef.current) throw memeErr;
-              }
-            }
             setStatus(`${attemptLabel} — rendering without text overlay (fallback).`);
             return executeWithFilter(noTextFilter);
           }

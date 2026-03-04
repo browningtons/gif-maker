@@ -32,7 +32,7 @@ function App() {
   const [overlayText, setOverlayText] = useState('');
   const [overlayTextX, setOverlayTextX] = useState(0.5);
   const [overlayTextY, setOverlayTextY] = useState(0.15);
-  const [overlayTextScale, setOverlayTextScale] = useState(0.09);
+  const [overlayTextSizePx, setOverlayTextSizePx] = useState(36);
   const [overlayTextFont, setOverlayTextFont] = useState<OverlayFontKey>('meme');
 
   const ffmpeg = useFFmpeg();
@@ -140,15 +140,11 @@ function App() {
       loopCount: settings.loopCount,
       targetSizeMode: settings.targetSizeMode,
       targetSizeMb: settings.targetSizeMb,
-      memeEnabled: settings.memeEnabled,
-      memeTopText: settings.memeTopText,
-      memeBottomText: settings.memeBottomText,
-      memeTextScale: settings.memeTextScale,
       overlayTextEnabled,
       overlayText,
       overlayTextX,
       overlayTextY,
-      overlayTextScale,
+      overlayTextSizePx,
       overlayTextFont,
       videoWidth: videoMeta.width,
       videoHeight: videoMeta.height,
@@ -158,9 +154,8 @@ function App() {
     }
   }, [file, settings.fps, settings.width, settings.colors, settings.dither,
       settings.speed, settings.startSec, settings.durationSec, settings.loopCount,
-      settings.targetSizeMode, settings.targetSizeMb, settings.memeEnabled, settings.memeTopText,
-      settings.memeBottomText, settings.memeTextScale,
-      overlayTextEnabled, overlayText, overlayTextX, overlayTextY, overlayTextScale, overlayTextFont,
+      settings.targetSizeMode, settings.targetSizeMb,
+      overlayTextEnabled, overlayText, overlayTextX, overlayTextY, overlayTextSizePx, overlayTextFont,
       videoMeta.width, videoMeta.height,
       ffmpeg.generateGif, ffmpeg.setStatus, timeToFirstGifMs]);
 
@@ -184,15 +179,11 @@ function App() {
       loopCount: settings.loopCount,
       targetSizeMode: false,
       targetSizeMb: settings.targetSizeMb,
-      memeEnabled: settings.memeEnabled,
-      memeTopText: settings.memeTopText,
-      memeBottomText: settings.memeBottomText,
-      memeTextScale: settings.memeTextScale,
       overlayTextEnabled,
       overlayText,
       overlayTextX,
       overlayTextY,
-      overlayTextScale,
+      overlayTextSizePx,
       overlayTextFont,
       previewFrameCount: 6,
       videoWidth: videoMeta.width,
@@ -204,8 +195,7 @@ function App() {
   }, [
     file, settings.fps, settings.width, settings.colors, settings.dither, settings.speed,
     settings.startSec, settings.durationSec, settings.loopCount, settings.targetSizeMb,
-    settings.memeEnabled, settings.memeTopText, settings.memeBottomText, settings.memeTextScale,
-    overlayTextEnabled, overlayText, overlayTextX, overlayTextY, overlayTextScale, overlayTextFont,
+    overlayTextEnabled, overlayText, overlayTextX, overlayTextY, overlayTextSizePx, overlayTextFont,
     videoMeta.width, videoMeta.height, ffmpeg.generateGif, ffmpeg.setStatus, timeToFirstGifMs,
   ]);
 
@@ -276,10 +266,6 @@ function App() {
                 platform={settings.platform}
                 targetSizeMb={settings.targetSizeMb}
                 targetSizeMode={settings.targetSizeMode}
-                memeEnabled={settings.memeEnabled}
-                memeTopText={settings.memeTopText}
-                memeBottomText={settings.memeBottomText}
-                memeTextScale={settings.memeTextScale}
                 videoDuration={videoMeta.duration}
                 onPresetChange={settings.applyPreset}
                 onFpsChange={settings.setFps}
@@ -292,10 +278,6 @@ function App() {
                 onPlatformChange={settings.setPlatform}
                 onTargetSizeMbChange={settings.setTargetSizeMb}
                 onTargetSizeModeToggle={() => settings.setTargetSizeMode((c) => !c)}
-                onMemeEnabledChange={settings.setMemeEnabled}
-                onMemeTopTextChange={settings.setMemeTopText}
-                onMemeBottomTextChange={settings.setMemeBottomText}
-                onMemeTextScaleChange={settings.setMemeTextScale}
                 onRestoreDefaults={settings.restoreDefaults}
               />
 
@@ -328,7 +310,7 @@ function App() {
             overlayText={overlayText}
             overlayX={overlayTextX}
             overlayY={overlayTextY}
-            overlayScale={overlayTextScale}
+            overlayFontSizePx={overlayTextSizePx}
             overlayFont={overlayTextFont}
             onOverlayEnabledChange={setOverlayTextEnabled}
             onOverlayTextChange={setOverlayText}
@@ -336,7 +318,7 @@ function App() {
               setOverlayTextX(x);
               setOverlayTextY(y);
             }}
-            onOverlayScaleChange={setOverlayTextScale}
+            onOverlayFontSizeChange={setOverlayTextSizePx}
             onOverlayFontChange={setOverlayTextFont}
           />
         </section>
