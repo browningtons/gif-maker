@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MIN_TRIM_DURATION,
   SPEED_MIN,
-  type OverlayFontKey,
 } from './types';
 import { estimateGifBytes, estimateHeightForWidth } from './utils';
 import { useSettings } from './hooks/useSettings';
@@ -28,14 +27,6 @@ function App() {
   const firstRenderStartRef = useRef<number | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const lastGifUrlRef = useRef<string | null>(null);
-  const [overlayTextEnabled, setOverlayTextEnabled] = useState(true);
-  const [overlayText, setOverlayText] = useState('');
-  const [overlayTextX, setOverlayTextX] = useState(0.08);
-  const [overlayTextY, setOverlayTextY] = useState(0.12);
-  const [overlayTextSizePx, setOverlayTextSizePx] = useState(36);
-  const [overlayBoxWidthPct, setOverlayBoxWidthPct] = useState(0.84);
-  const [overlayBoxHeightPx, setOverlayBoxHeightPx] = useState(86);
-  const [overlayTextFont, setOverlayTextFont] = useState<OverlayFontKey>('meme');
 
   const ffmpeg = useFFmpeg();
 
@@ -142,14 +133,14 @@ function App() {
       loopCount: settings.loopCount,
       targetSizeMode: settings.targetSizeMode,
       targetSizeMb: settings.targetSizeMb,
-      overlayTextEnabled,
-      overlayText,
-      overlayTextX,
-      overlayTextY,
-      overlayTextSizePx,
-      overlayBoxWidthPct,
-      overlayBoxHeightPx,
-      overlayTextFont,
+      overlayTextEnabled: false,
+      overlayText: '',
+      overlayTextX: 0.08,
+      overlayTextY: 0.12,
+      overlayTextSizePx: 36,
+      overlayBoxWidthPct: 0.84,
+      overlayBoxHeightPx: 86,
+      overlayTextFont: 'meme',
       videoWidth: videoMeta.width,
       videoHeight: videoMeta.height,
     });
@@ -159,8 +150,6 @@ function App() {
   }, [file, settings.fps, settings.width, settings.colors, settings.dither,
       settings.speed, settings.startSec, settings.durationSec, settings.loopCount,
       settings.targetSizeMode, settings.targetSizeMb,
-      overlayTextEnabled, overlayText, overlayTextX, overlayTextY, overlayTextSizePx,
-      overlayBoxWidthPct, overlayBoxHeightPx, overlayTextFont,
       videoMeta.width, videoMeta.height,
       ffmpeg.generateGif, ffmpeg.setStatus, timeToFirstGifMs]);
 
@@ -184,14 +173,14 @@ function App() {
       loopCount: settings.loopCount,
       targetSizeMode: false,
       targetSizeMb: settings.targetSizeMb,
-      overlayTextEnabled,
-      overlayText,
-      overlayTextX,
-      overlayTextY,
-      overlayTextSizePx,
-      overlayBoxWidthPct,
-      overlayBoxHeightPx,
-      overlayTextFont,
+      overlayTextEnabled: false,
+      overlayText: '',
+      overlayTextX: 0.08,
+      overlayTextY: 0.12,
+      overlayTextSizePx: 36,
+      overlayBoxWidthPct: 0.84,
+      overlayBoxHeightPx: 86,
+      overlayTextFont: 'meme',
       previewFrameCount: 6,
       videoWidth: videoMeta.width,
       videoHeight: videoMeta.height,
@@ -202,8 +191,6 @@ function App() {
   }, [
     file, settings.fps, settings.width, settings.colors, settings.dither, settings.speed,
     settings.startSec, settings.durationSec, settings.loopCount, settings.targetSizeMb,
-    overlayTextEnabled, overlayText, overlayTextX, overlayTextY, overlayTextSizePx,
-    overlayBoxWidthPct, overlayBoxHeightPx, overlayTextFont,
     videoMeta.width, videoMeta.height, ffmpeg.generateGif, ffmpeg.setStatus, timeToFirstGifMs,
   ]);
 
@@ -314,24 +301,6 @@ function App() {
             sourcePreviewUrl={videoMeta.thumbnailUrl}
             gifName={gifName}
             onGifNameChange={setGifName}
-            overlayEnabled={overlayTextEnabled}
-            overlayText={overlayText}
-            overlayX={overlayTextX}
-            overlayY={overlayTextY}
-            overlayFontSizePx={overlayTextSizePx}
-            overlayBoxWidthPct={overlayBoxWidthPct}
-            overlayBoxHeightPx={overlayBoxHeightPx}
-            overlayFont={overlayTextFont}
-            onOverlayEnabledChange={setOverlayTextEnabled}
-            onOverlayTextChange={setOverlayText}
-            onOverlayPositionChange={(x, y) => {
-              setOverlayTextX(x);
-              setOverlayTextY(y);
-            }}
-            onOverlayFontSizeChange={setOverlayTextSizePx}
-            onOverlayBoxWidthChange={setOverlayBoxWidthPct}
-            onOverlayBoxHeightChange={setOverlayBoxHeightPx}
-            onOverlayFontChange={setOverlayTextFont}
           />
         </section>
       </div>
