@@ -232,6 +232,10 @@ export function useFFmpeg() {
         overlayTextSizePx, overlayBoxWidthPct, overlayBoxHeightPx, overlayTextFont,
         previewFrameCount, videoWidth, videoHeight,
       } = params;
+      const ffmpeg = ffmpegRef.current;
+      let inputName: string | null = null;
+      let paletteName: string | null = null;
+      let outputName: string | null = null;
 
       try {
         cancelRequestedRef.current = false;
@@ -241,13 +245,18 @@ export function useFFmpeg() {
         setStage('preparing');
         setStatus('Preparing video...');
 
-        const ffmpeg = ffmpegRef.current;
         const ts = Date.now();
-        const inputName = `input-${ts}-${file.name}`;
-        const paletteName = `palette-${ts}.png`;
-        const outputName = `output-${ts}.gif`;
+        inputName = `input-${ts}-${file.name}`;
+        paletteName = `palette-${ts}.png`;
+        outputName = `output-${ts}.gif`;
+        if (!inputName || !paletteName || !outputName) {
+          throw new Error('Failed to initialize FFmpeg temp files');
+        }
+        const inputFile = inputName;
+        const paletteFile = paletteName;
+        const outputFile = outputName;
 
-        await ffmpeg.writeFile(inputName, await fetchFile(file));
+        await ffmpeg.writeFile(inputFile, await fetchFile(file));
 
         const toFixed = (v: number) => v.toFixed(2);
         const trimArgs = [
@@ -264,6 +273,17 @@ export function useFFmpeg() {
         const safeOverlayBoxWidthPct = clampOverlayBoxWidthPct(overlayBoxWidthPct);
         const safeOverlayBoxHeightPx = clampOverlayBoxHeightPx(overlayBoxHeightPx);
         const ffmpegFontFamily = OVERLAY_FONT_PROFILES[overlayTextFont]?.ffmpegFamily;
+        const sourceEvenWidth = videoWidth > 0 ? Math.max(2, Math.round(videoWidth / 2) * 2) : null;
+        const minWidthFloor = sourceEvenWidth !== null
+          ? Math.max(2, Math.min(TARGET_MIN_WIDTH, sourceEvenWidth))
+          : TARGET_MIN_WIDTH;
+
+        const clampAttemptWidth = (candidate: number): number => {
+          const evenCandidate = Math.max(2, Math.round(candidate / 2) * 2);
+          const noUpscale = sourceEvenWidth !== null ? Math.min(sourceEvenWidth, evenCandidate) : evenCandidate;
+          return Math.max(minWidthFloor, noUpscale);
+        };
+
         const safePreviewFrameCount =
           Number.isFinite(previewFrameCount) && previewFrameCount !== undefined
             ? Math.max(2, Math.min(24, Math.floor(previewFrameCount)))
@@ -323,10 +343,10 @@ export function useFFmpeg() {
             setStage('palette');
             setStatus(`${attemptLabel} — building palette...`);
             await ffmpeg.exec([
-              '-y', '-i', inputName, ...trimArgs,
+              '-y', '-i', inputFile, ...trimArgs,
               '-frames:v', '1', '-update', '1',
               '-vf', `${videoFilter},palettegen=max_colors=${attemptColors}:stats_mode=full`,
-              paletteName,
+              paletteFile,
             ]);
 
             if (cancelRequestedRef.current) throw new Error('Render canceled');
@@ -334,16 +354,16 @@ export function useFFmpeg() {
             setStage('rendering');
             setStatus(`${attemptLabel} — rendering frames...`);
             await ffmpeg.exec([
-              '-y', '-i', inputName, ...trimArgs,
-              '-i', paletteName,
+              '-y', '-i', inputFile, ...trimArgs,
+              '-i', paletteFile,
               '-lavfi', `${videoFilter}[x];[x][1:v]paletteuse=dither=${dither}:diff_mode=rectangle`,
               ...(safePreviewFrameCount ? ['-frames:v', String(safePreviewFrameCount)] : []),
               '-loop', String(loopCount),
-              outputName,
+              outputFile,
             ]);
 
             if (cancelRequestedRef.current) throw new Error('Render canceled');
-            const data = await ffmpeg.readFile(outputName);
+            const data = await ffmpeg.readFile(outputFile);
             const bytes = data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(data);
             return new Blob([bytes], { type: 'image/gif' });
           };
@@ -375,7 +395,7 @@ export function useFFmpeg() {
 
         let finalBlob: Blob | null = null;
         let hitTarget = false;
-        let finalWidth = Math.max(TARGET_MIN_WIDTH, Math.round(width / 2) * 2);
+        let finalWidth = clampAttemptWidth(Math.max(TARGET_MIN_WIDTH, Math.round(width / 2) * 2));
         let finalFps = Math.max(TARGET_MIN_FPS, fps);
         let finalColors = Math.max(TARGET_MIN_COLORS, Math.min(256, colors));
 
@@ -403,7 +423,9 @@ export function useFFmpeg() {
               break;
             }
 
-            attemptWidth = Math.max(TARGET_MIN_WIDTH, Math.floor((attemptWidth * TARGET_WIDTH_SHRINK) / 2) * 2);
+            attemptWidth = clampAttemptWidth(
+              Math.floor((attemptWidth * TARGET_WIDTH_SHRINK) / 2) * 2
+            );
             attemptFps = Math.max(TARGET_MIN_FPS, attemptFps - 1);
             attemptColors = Math.max(attempt < 3 ? 48 : TARGET_MIN_COLORS, attemptColors - (attempt < 3 ? 16 : 8));
           }
@@ -451,12 +473,6 @@ export function useFFmpeg() {
         }
 
         setStage('done');
-
-        // Clean up temp files
-        await ffmpeg.deleteFile(inputName).catch(() => {});
-        await ffmpeg.deleteFile(paletteName).catch(() => {});
-        await ffmpeg.deleteFile(outputName).catch(() => {});
-
         return { blob: finalBlob, hitTarget, finalWidth, finalFps, finalColors };
       } catch (error) {
         if (cancelRequestedRef.current) {
@@ -475,6 +491,9 @@ export function useFFmpeg() {
         setStage('idle');
         return null;
       } finally {
+        if (inputName) await ffmpeg.deleteFile(inputName).catch(() => {});
+        if (paletteName) await ffmpeg.deleteFile(paletteName).catch(() => {});
+        if (outputName) await ffmpeg.deleteFile(outputName).catch(() => {});
         setGenerating(false);
         cancelRequestedRef.current = false;
       }
