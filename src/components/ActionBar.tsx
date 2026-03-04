@@ -8,6 +8,7 @@ type ActionBarProps = {
   status: string;
   timeToFirstGifMs: number | null;
   onGenerate: () => void;
+  onQuickPreview: () => void;
   onCancel: () => void;
 };
 
@@ -24,7 +25,7 @@ const STAGE_LABELS: Record<RenderStage, string> = {
 export function ActionBar(props: ActionBarProps) {
   const {
     file, generating, progress, stage, status, timeToFirstGifMs,
-    onGenerate, onCancel,
+    onGenerate, onQuickPreview, onCancel,
   } = props;
 
   const stageLabel = STAGE_LABELS[stage];
@@ -38,6 +39,13 @@ export function ActionBar(props: ActionBarProps) {
           className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-contrast)] hover:bg-[var(--orange-700)] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {generating ? 'Forging GIF...' : 'Forge Great GIF'}
+        </button>
+        <button
+          onClick={onQuickPreview}
+          disabled={!file || generating}
+          className="rounded-xl border border-[var(--color-border)] bg-[var(--surface-2)] px-4 py-2 text-sm font-semibold text-[var(--secondary)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Quick preview (6 frames)
         </button>
         <button
           onClick={onCancel}

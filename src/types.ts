@@ -1,6 +1,7 @@
 export type PresetKey = 'ultra' | 'balanced' | 'compact';
 export type PlatformKey = 'linkedin' | 'x' | 'instagram' | 'facebook' | 'tiktok' | 'custom';
 export type DitherKey = 'none' | 'bayer' | 'floyd_steinberg' | 'sierra2' | 'sierra2_4a';
+export type OverlayFontKey = 'meme' | 'sans' | 'serif' | 'mono';
 
 export type Settings = {
   fps: number;
@@ -130,3 +131,28 @@ export const FFMPEG_RETRY_DELAY_MS = 2000;
 export const LARGE_FILE_WARNING_BYTES = 100 * 1024 * 1024;
 
 export const DEFAULT_PRESET: PresetKey = 'balanced';
+
+export const OVERLAY_FONT_PROFILES: Record<
+  OverlayFontKey,
+  { label: string; cssFamily: string; ffmpegFamily?: string }
+> = {
+  meme: {
+    label: 'Meme bold',
+    cssFamily: 'Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif',
+  },
+  sans: {
+    label: 'Clean sans',
+    cssFamily: '"Trebuchet MS", "Segoe UI", sans-serif',
+    ffmpegFamily: 'Sans',
+  },
+  serif: {
+    label: 'Classic serif',
+    cssFamily: 'Georgia, "Times New Roman", serif',
+    ffmpegFamily: 'Serif',
+  },
+  mono: {
+    label: 'Code mono',
+    cssFamily: '"Courier New", monospace',
+    ffmpegFamily: 'Monospace',
+  },
+};

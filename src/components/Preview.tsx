@@ -1,13 +1,84 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { type OverlayFontKey, OVERLAY_FONT_PROFILES } from '../types';
 
 type PreviewProps = {
   gifUrl: string | null;
+  sourcePreviewUrl: string | null;
   gifName: string;
   onGifNameChange: (name: string) => void;
+  overlayEnabled: boolean;
+  overlayText: string;
+  overlayX: number;
+  overlayY: number;
+  overlayScale: number;
+  overlayFont: OverlayFontKey;
+  onOverlayEnabledChange: (value: boolean) => void;
+  onOverlayTextChange: (value: string) => void;
+  onOverlayPositionChange: (x: number, y: number) => void;
+  onOverlayScaleChange: (value: number) => void;
+  onOverlayFontChange: (value: OverlayFontKey) => void;
 };
 
-export function Preview({ gifUrl, gifName, onGifNameChange }: PreviewProps) {
+function clampUnit(value: number): number {
+  if (!Number.isFinite(value)) return 0.5;
+  return Math.min(1, Math.max(0, value));
+}
+
+export function Preview({
+  gifUrl,
+  sourcePreviewUrl,
+  gifName,
+  onGifNameChange,
+  overlayEnabled,
+  overlayText,
+  overlayX,
+  overlayY,
+  overlayScale,
+  overlayFont,
+  onOverlayEnabledChange,
+  onOverlayTextChange,
+  onOverlayPositionChange,
+  onOverlayScaleChange,
+  onOverlayFontChange,
+}: PreviewProps) {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [isDraggingOverlay, setIsDraggingOverlay] = useState(false);
+  const [previewHeight, setPreviewHeight] = useState(0);
+  const previewFrameRef = useRef<HTMLDivElement | null>(null);
+
+  const previewUrl = gifUrl ?? sourcePreviewUrl;
+  const hasPreview = Boolean(previewUrl);
+
+  useEffect(() => {
+    const frame = previewFrameRef.current;
+    if (!frame || typeof window === 'undefined') return;
+    const observer = new window.ResizeObserver((entries) => {
+      const nextHeight = entries[0]?.contentRect.height ?? 0;
+      setPreviewHeight(nextHeight);
+    });
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!isDraggingOverlay) return;
+    const handlePointerMove = (event: PointerEvent) => {
+      const frame = previewFrameRef.current;
+      if (!frame) return;
+      const rect = frame.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const x = clampUnit((event.clientX - rect.left) / rect.width);
+      const y = clampUnit((event.clientY - rect.top) / rect.height);
+      onOverlayPositionChange(x, y);
+    };
+    const handlePointerUp = () => setIsDraggingOverlay(false);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [isDraggingOverlay, onOverlayPositionChange]);
 
   const handleCopyToClipboard = useCallback(async (silent = false) => {
     if (!gifUrl) return;
@@ -69,22 +140,125 @@ export function Preview({ gifUrl, gifName, onGifNameChange }: PreviewProps) {
     return name.endsWith('.gif') ? name : `${name}.gif`;
   };
 
+  const overlayFontPx = Math.max(16, Math.round(Math.max(0, previewHeight) * overlayScale));
+
   return (
     <aside className="rounded-[var(--radius)] border border-[var(--color-border-subtle)] bg-[var(--surface)] p-6 shadow-[var(--shadow)]">
       <h2 className="text-lg font-semibold text-[var(--secondary)]">Preview</h2>
       <p className="mt-1 text-sm text-[var(--text-muted)]">
-        Your generated GIF will appear here.
+        {gifUrl ? 'Your generated GIF is shown below.' : 'Use quick preview to validate before full render.'}
       </p>
       <div className="mt-4 flex min-h-80 items-center justify-center rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3">
-        {gifUrl ? (
-          <img
-            src={gifUrl}
-            alt="Generated GIF"
-            className="max-h-[420px] w-full rounded-lg object-contain"
-          />
+        {hasPreview ? (
+          <div ref={previewFrameRef} className="relative inline-block w-full">
+            <img
+              src={previewUrl ?? undefined}
+              alt={gifUrl ? 'Generated GIF' : 'Source preview frame'}
+              className="max-h-[420px] w-full rounded-lg object-contain"
+            />
+            {overlayEnabled && overlayText.trim() && (
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label="Drag text overlay"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  setIsDraggingOverlay(true);
+                  if (previewFrameRef.current) {
+                    const rect = previewFrameRef.current.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                      onOverlayPositionChange(
+                        clampUnit((event.clientX - rect.left) / rect.width),
+                        clampUnit((event.clientY - rect.top) / rect.height)
+                      );
+                    }
+                  }
+                }}
+                onKeyDown={(event) => {
+                  const step = event.shiftKey ? 0.04 : 0.015;
+                  if (event.key === 'ArrowLeft') onOverlayPositionChange(clampUnit(overlayX - step), overlayY);
+                  if (event.key === 'ArrowRight') onOverlayPositionChange(clampUnit(overlayX + step), overlayY);
+                  if (event.key === 'ArrowUp') onOverlayPositionChange(overlayX, clampUnit(overlayY - step));
+                  if (event.key === 'ArrowDown') onOverlayPositionChange(overlayX, clampUnit(overlayY + step));
+                }}
+                className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-center text-white shadow-[0_1px_2px_rgba(0,0,0,0.7)] ${
+                  isDraggingOverlay ? 'cursor-grabbing' : 'cursor-grab'
+                }`}
+                style={{
+                  left: `${clampUnit(overlayX) * 100}%`,
+                  top: `${clampUnit(overlayY) * 100}%`,
+                  fontFamily: OVERLAY_FONT_PROFILES[overlayFont].cssFamily,
+                  fontSize: `${overlayFontPx}px`,
+                  lineHeight: 1.1,
+                  fontWeight: overlayFont === 'mono' ? 700 : 800,
+                  textShadow: '2px 2px 0 #000, -2px 2px 0 #000, 2px -2px 0 #000, -2px -2px 0 #000',
+                }}
+              >
+                {overlayText}
+              </div>
+            )}
+          </div>
         ) : (
           <span className="text-sm text-[var(--text-muted)]">No GIF yet</span>
         )}
+      </div>
+      <div className="mt-4 space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--surface-2)] p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-[var(--secondary)]">Draggable text box</h3>
+          <button
+            type="button"
+            onClick={() => onOverlayEnabledChange(!overlayEnabled)}
+            className={`rounded-xl border px-3 py-1.5 text-xs font-semibold ${
+              overlayEnabled
+                ? 'border-[var(--teal-700)] bg-[var(--teal-50)] text-[var(--teal-700)]'
+                : 'border-[var(--color-border)] bg-[var(--surface)] text-[var(--secondary)]'
+            }`}
+          >
+            {overlayEnabled ? 'On' : 'Off'}
+          </button>
+        </div>
+        <label className="block text-sm">
+          <span className="mb-1 block text-xs font-medium text-[var(--secondary)]">Text</span>
+          <input
+            type="text"
+            value={overlayText}
+            onChange={(event) => onOverlayTextChange(event.target.value)}
+            placeholder="Type something funny..."
+            className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--surface)] p-2 text-sm text-[var(--text)]"
+          />
+        </label>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block text-sm">
+            <span className="mb-1 block text-xs font-medium text-[var(--secondary)]">Font</span>
+            <select
+              value={overlayFont}
+              onChange={(event) => onOverlayFontChange(event.target.value as OverlayFontKey)}
+              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--surface)] p-2 text-sm text-[var(--text)]"
+            >
+              <option value="meme">{OVERLAY_FONT_PROFILES.meme.label}</option>
+              <option value="sans">{OVERLAY_FONT_PROFILES.sans.label}</option>
+              <option value="serif">{OVERLAY_FONT_PROFILES.serif.label}</option>
+              <option value="mono">{OVERLAY_FONT_PROFILES.mono.label}</option>
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-xs font-medium text-[var(--secondary)]">
+              Size ({Math.round(overlayScale * 100)}% of frame)
+            </span>
+            <input
+              type="range"
+              min={0.05}
+              max={0.16}
+              step={0.005}
+              value={overlayScale}
+              onChange={(event) => onOverlayScaleChange(Number(event.target.value))}
+              className="w-full accent-[var(--link)]"
+            />
+          </label>
+        </div>
+        <p className="text-xs text-[var(--text-muted)]">
+          Drag the text directly on the preview to position it.
+        </p>
       </div>
       {gifUrl && (
         <div className="mt-4 space-y-3">

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MIN_TRIM_DURATION,
   SPEED_MIN,
+  type OverlayFontKey,
 } from './types';
 import { estimateGifBytes, estimateHeightForWidth } from './utils';
 import { useSettings } from './hooks/useSettings';
@@ -27,6 +28,12 @@ function App() {
   const firstRenderStartRef = useRef<number | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const lastGifUrlRef = useRef<string | null>(null);
+  const [overlayTextEnabled, setOverlayTextEnabled] = useState(true);
+  const [overlayText, setOverlayText] = useState('');
+  const [overlayTextX, setOverlayTextX] = useState(0.5);
+  const [overlayTextY, setOverlayTextY] = useState(0.15);
+  const [overlayTextScale, setOverlayTextScale] = useState(0.09);
+  const [overlayTextFont, setOverlayTextFont] = useState<OverlayFontKey>('meme');
 
   const ffmpeg = useFFmpeg();
 
@@ -137,6 +144,12 @@ function App() {
       memeTopText: settings.memeTopText,
       memeBottomText: settings.memeBottomText,
       memeTextScale: settings.memeTextScale,
+      overlayTextEnabled,
+      overlayText,
+      overlayTextX,
+      overlayTextY,
+      overlayTextScale,
+      overlayTextFont,
       videoWidth: videoMeta.width,
       videoHeight: videoMeta.height,
     });
@@ -146,8 +159,55 @@ function App() {
   }, [file, settings.fps, settings.width, settings.colors, settings.dither,
       settings.speed, settings.startSec, settings.durationSec, settings.loopCount,
       settings.targetSizeMode, settings.targetSizeMb, settings.memeEnabled, settings.memeTopText,
-      settings.memeBottomText, settings.memeTextScale, videoMeta.width, videoMeta.height,
+      settings.memeBottomText, settings.memeTextScale,
+      overlayTextEnabled, overlayText, overlayTextX, overlayTextY, overlayTextScale, overlayTextFont,
+      videoMeta.width, videoMeta.height,
       ffmpeg.generateGif, ffmpeg.setStatus, timeToFirstGifMs]);
+
+  const handleQuickPreview = useCallback(async () => {
+    if (!file) {
+      ffmpeg.setStatus('Choose a video file first.');
+      return;
+    }
+    if (firstRenderStartRef.current === null) {
+      firstRenderStartRef.current = performance.now();
+    }
+    const result = await ffmpeg.generateGif({
+      file,
+      fps: settings.fps,
+      width: settings.width,
+      colors: settings.colors,
+      dither: settings.dither,
+      speed: settings.speed,
+      startSec: settings.startSec,
+      durationSec: settings.durationSec,
+      loopCount: settings.loopCount,
+      targetSizeMode: false,
+      targetSizeMb: settings.targetSizeMb,
+      memeEnabled: settings.memeEnabled,
+      memeTopText: settings.memeTopText,
+      memeBottomText: settings.memeBottomText,
+      memeTextScale: settings.memeTextScale,
+      overlayTextEnabled,
+      overlayText,
+      overlayTextX,
+      overlayTextY,
+      overlayTextScale,
+      overlayTextFont,
+      previewFrameCount: 6,
+      videoWidth: videoMeta.width,
+      videoHeight: videoMeta.height,
+    });
+    if (result && timeToFirstGifMs === null && firstRenderStartRef.current !== null) {
+      setTimeToFirstGifMs(Math.round(performance.now() - firstRenderStartRef.current));
+    }
+  }, [
+    file, settings.fps, settings.width, settings.colors, settings.dither, settings.speed,
+    settings.startSec, settings.durationSec, settings.loopCount, settings.targetSizeMb,
+    settings.memeEnabled, settings.memeTopText, settings.memeBottomText, settings.memeTextScale,
+    overlayTextEnabled, overlayText, overlayTextX, overlayTextY, overlayTextScale, overlayTextFont,
+    videoMeta.width, videoMeta.height, ffmpeg.generateGif, ffmpeg.setStatus, timeToFirstGifMs,
+  ]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -253,12 +313,32 @@ function App() {
                 status={ffmpeg.status}
                 timeToFirstGifMs={timeToFirstGifMs}
                 onGenerate={handleGenerate}
+                onQuickPreview={handleQuickPreview}
                 onCancel={ffmpeg.cancelRender}
               />
             </div>
           </div>
 
-          <Preview gifUrl={ffmpeg.gifUrl} gifName={gifName} onGifNameChange={setGifName} />
+          <Preview
+            gifUrl={ffmpeg.gifUrl}
+            sourcePreviewUrl={videoMeta.thumbnailUrl}
+            gifName={gifName}
+            onGifNameChange={setGifName}
+            overlayEnabled={overlayTextEnabled}
+            overlayText={overlayText}
+            overlayX={overlayTextX}
+            overlayY={overlayTextY}
+            overlayScale={overlayTextScale}
+            overlayFont={overlayTextFont}
+            onOverlayEnabledChange={setOverlayTextEnabled}
+            onOverlayTextChange={setOverlayText}
+            onOverlayPositionChange={(x, y) => {
+              setOverlayTextX(x);
+              setOverlayTextY(y);
+            }}
+            onOverlayScaleChange={setOverlayTextScale}
+            onOverlayFontChange={setOverlayTextFont}
+          />
         </section>
       </div>
     </main>
