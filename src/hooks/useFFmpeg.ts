@@ -330,14 +330,14 @@ export function useFFmpeg() {
             `x=${boxCenterX}-text_w/2`,
             `y=h*${safeOverlayY.toFixed(4)}`,
           ];
-
-          const composeVideoFilter = (includeFloatingText: boolean, includeFloatingFont: boolean) => {
+          const composeVideoFilter = (fontFamily: string | null) => {
             const parts: string[] = [scaleAndRate];
-            if (includeFloatingText && hasFloatingText) {
-              const floatingPrefix = includeFloatingFont && ffmpegFontFamily
-                ? [`font=${ffmpegFontFamily}`]
-                : [];
-              parts.push(`drawtext=${[...floatingPrefix, ...floatingTextStyle].join(':')}`);
+            if (hasFloatingText) {
+              const drawtextParts = [
+                ...(fontFamily ? [`font=${fontFamily}`] : []),
+                ...floatingTextStyle,
+              ];
+              parts.push(`drawtext=${drawtextParts.join(':')}`);
             }
             return parts.join(',');
           };
@@ -373,8 +373,10 @@ export function useFFmpeg() {
             return new Blob([bytes], { type: 'image/gif' });
           };
 
-          const withFontFilter = composeVideoFilter(true, true);
-          const withoutFontFilter = composeVideoFilter(true, false);
+          const defaultOverlayFont = ffmpegFontFamily ?? null;
+          const fontCandidates = Array.from(
+            new Set<string | null>([defaultOverlayFont, 'Sans', 'Serif', 'Monospace', null])
+          );
           const noTextFilter = scaleAndRate;
           const hasAnyTextOverlay = hasFloatingText;
 
@@ -382,20 +384,24 @@ export function useFFmpeg() {
             return executeWithFilter(noTextFilter);
           }
 
-          try {
-            return await executeWithFilter(withFontFilter);
-          } catch (fontErr) {
-            if (cancelRequestedRef.current) throw fontErr;
-            setStatus(`${attemptLabel} — font fallback in progress...`);
+          let lastOverlayError: unknown = null;
+          for (const fontCandidate of fontCandidates) {
+            const candidateLabel = fontCandidate ?? 'default font';
+            try {
+              return await executeWithFilter(composeVideoFilter(fontCandidate));
+            } catch (fontErr) {
+              if (cancelRequestedRef.current) throw fontErr;
+              lastOverlayError = fontErr;
+              setStatus(`${attemptLabel} — trying text render fallback (${candidateLabel})...`);
+            }
           }
 
-          try {
-            return await executeWithFilter(withoutFontFilter);
-          } catch (textErr) {
-            if (cancelRequestedRef.current) throw textErr;
-            setStatus(`${attemptLabel} — rendering without text overlay (fallback).`);
-            return executeWithFilter(noTextFilter);
+          setStatus(`${attemptLabel} — rendering without text overlay (fallback).`);
+          const noTextBlob = await executeWithFilter(noTextFilter);
+          if (lastOverlayError) {
+            console.warn('Text overlay rendering failed; used no-text fallback:', lastOverlayError);
           }
+          return noTextBlob;
         };
 
         let finalBlob: Blob | null = null;

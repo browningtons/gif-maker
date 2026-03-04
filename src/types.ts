@@ -147,6 +147,7 @@ export const OVERLAY_FONT_PROFILES: Record<
   meme: {
     label: 'Meme bold',
     cssFamily: 'Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif',
+    ffmpegFamily: 'Sans',
   },
   sans: {
     label: 'Clean sans',
