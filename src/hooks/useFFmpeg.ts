@@ -125,6 +125,23 @@ function wrapTextForBox(text: string, boxWidthPx: number, fontSizePx: number, ma
   return lines.slice(0, maxLines).join('\n').trim();
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message;
+  if (typeof error === 'string' && error.trim()) return error;
+  if (error && typeof error === 'object') {
+    const maybeMessage = (error as { message?: unknown }).message;
+    if (typeof maybeMessage === 'string' && maybeMessage.trim()) return maybeMessage;
+    try {
+      const serialized = JSON.stringify(error);
+      if (serialized && serialized !== '{}') return serialized;
+    } catch {
+      // ignore
+    }
+    return String(error);
+  }
+  return 'Unknown error';
+}
+
 export function useFFmpeg() {
   const ffmpegRef = useRef(new FFmpeg());
   const cancelRequestedRef = useRef(false);
@@ -269,10 +286,12 @@ export function useFFmpeg() {
           );
           const safeOverlayX = Math.min(maxOverlayX, safeOverlayXRaw);
           const safeOverlayY = Math.min(maxOverlayY, safeOverlayYRaw);
+          const boxWidthPx = Math.max(1, Math.round(attemptWidth * safeOverlayBoxWidthPct));
+          const boxCenterX = Math.round((attemptWidth * safeOverlayX) + (boxWidthPx / 2));
           const wrappedFloatingText = shouldOverlayFloatingText
             ? wrapTextForBox(
                 normalizedFloatingText,
-                Math.round(attemptWidth * safeOverlayBoxWidthPct),
+                boxWidthPx,
                 safeOverlayTextSizePx,
                 Math.max(1, Math.floor(safeOverlayBoxHeightPx / Math.max(14, safeOverlayTextSizePx * 1.18)))
               )
@@ -285,8 +304,7 @@ export function useFFmpeg() {
             'borderw=3',
             'bordercolor=black',
             `fontsize=${safeOverlayTextSizePx}`,
-            `line_spacing=${Math.max(2, Math.round(safeOverlayTextSizePx * 0.16))}`,
-            `x=(w*${safeOverlayX.toFixed(4)})+((w*${safeOverlayBoxWidthPct.toFixed(4)})-text_w)/2`,
+            `x=${boxCenterX}-text_w/2`,
             `y=h*${safeOverlayY.toFixed(4)}`,
           ];
 
@@ -445,7 +463,7 @@ export function useFFmpeg() {
           setStatus('Render canceled. Ready for next conversion.');
         } else {
           console.error(error);
-          const msg = error instanceof Error ? error.message : 'Unknown error';
+          const msg = getErrorMessage(error);
           if (msg.includes('SharedArrayBuffer')) {
             setStatus('Browser requires cross-origin isolation (COOP/COEP headers) for FFmpeg.');
           } else if (msg.includes('memory')) {
