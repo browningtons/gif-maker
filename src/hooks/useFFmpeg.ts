@@ -48,6 +48,8 @@ type RenderParams = {
   previewFrameCount?: number;
   videoWidth: number;
   videoHeight: number;
+  fsRecoveryAttempt?: number;
+  forceReloadFFmpeg?: boolean;
 };
 
 type RenderResult = {
@@ -176,9 +178,10 @@ export function useFFmpeg() {
     setStatus('Render canceled. Ready for next conversion.');
   }, [generating]);
 
-  const loadFFmpeg = useCallback(async (options?: { silent?: boolean }) => {
+  const loadFFmpeg = useCallback(async (options?: { silent?: boolean; force?: boolean }) => {
     const silent = options?.silent ?? false;
-    if (loaded) return;
+    const force = options?.force ?? false;
+    if (loaded && !force) return;
     const ffmpeg = ffmpegRef.current;
     if (!silent) setStage('loading');
 
@@ -230,7 +233,7 @@ export function useFFmpeg() {
         file, fps, width, colors, dither, speed, startSec, durationSec,
         loopCount, targetSizeMode, targetSizeMb, overlayTextEnabled, overlayText, overlayTextX, overlayTextY,
         overlayTextSizePx, overlayBoxWidthPct, overlayBoxHeightPx, overlayTextFont,
-        previewFrameCount, videoWidth, videoHeight,
+        previewFrameCount, videoWidth, videoHeight, fsRecoveryAttempt, forceReloadFFmpeg,
       } = params;
       const ffmpeg = ffmpegRef.current;
       let inputName: string | null = null;
@@ -239,7 +242,7 @@ export function useFFmpeg() {
 
       try {
         cancelRequestedRef.current = false;
-        await loadFFmpeg();
+        await loadFFmpeg({ force: forceReloadFFmpeg });
         setGenerating(true);
         setProgress(0);
         setStage('preparing');
@@ -342,9 +345,11 @@ export function useFFmpeg() {
           const executeWithFilter = async (videoFilter: string): Promise<Blob> => {
             setStage('palette');
             setStatus(`${attemptLabel} — building palette...`);
+            await ffmpeg.deleteFile(paletteFile).catch(() => {});
+            await ffmpeg.deleteFile(outputFile).catch(() => {});
             await ffmpeg.exec([
               '-y', '-i', inputFile, ...trimArgs,
-              '-frames:v', '1', '-update', '1',
+              '-frames:v', '1',
               '-vf', `${videoFilter},palettegen=max_colors=${attemptColors}:stats_mode=full`,
               paletteFile,
             ]);
@@ -480,6 +485,22 @@ export function useFFmpeg() {
         } else {
           console.error(error);
           const msg = getErrorMessage(error);
+          const isFsError = /FS error|ErrnoError/i.test(msg);
+          if (isFsError && (fsRecoveryAttempt ?? 0) < 1) {
+            setStatus('Recovering from browser FS error and retrying once...');
+            try {
+              ffmpegRef.current.terminate();
+            } catch {
+              // no-op
+            }
+            ffmpegRef.current = new FFmpeg();
+            setLoaded(false);
+            return generateGif({
+              ...params,
+              fsRecoveryAttempt: (fsRecoveryAttempt ?? 0) + 1,
+              forceReloadFFmpeg: true,
+            });
+          }
           if (msg.includes('SharedArrayBuffer')) {
             setStatus('Browser requires cross-origin isolation (COOP/COEP headers) for FFmpeg.');
           } else if (msg.includes('memory')) {
