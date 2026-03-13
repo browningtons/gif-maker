@@ -29,6 +29,9 @@ type RenderParams = {
   loopCount: number;
   targetSizeMode: boolean;
   targetSizeMb: number;
+  overlayTextEnabled?: boolean;
+  overlayText?: string;
+  overlayTextSizePx?: number;
   previewFrameCount?: number;
   videoWidth: number;
   videoHeight: number;
@@ -59,6 +62,84 @@ function getErrorMessage(error: unknown): string {
     return String(error);
   }
   return 'Unknown error';
+}
+
+function wrapOverlayText(
+  context: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number
+): string[] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+
+  const lines: string[] = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    const nextLine = currentLine ? `${currentLine} ${word}` : word;
+    if (context.measureText(nextLine).width <= maxWidth) {
+      currentLine = nextLine;
+      continue;
+    }
+    if (currentLine) {
+      lines.push(currentLine);
+      currentLine = word;
+    } else {
+      lines.push(word);
+      currentLine = '';
+    }
+  }
+
+  if (currentLine) lines.push(currentLine);
+  return lines.slice(0, 3);
+}
+
+async function buildOverlayImage(
+  text: string,
+  width: number,
+  height: number,
+  fontSizePx: number
+): Promise<Uint8Array | null> {
+  if (typeof document === 'undefined') return null;
+  const normalizedText = text.trim();
+  if (!normalizedText) return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+
+  context.clearRect(0, 0, width, height);
+  context.textAlign = 'center';
+  context.textBaseline = 'alphabetic';
+  context.lineJoin = 'round';
+  context.strokeStyle = 'rgba(0, 0, 0, 0.96)';
+  context.fillStyle = '#ffffff';
+  context.lineWidth = Math.max(3, Math.round(fontSizePx * 0.16));
+  context.font = `900 ${fontSizePx}px Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif`;
+
+  const maxTextWidth = width * 0.88;
+  const lines = wrapOverlayText(context, normalizedText, maxTextWidth);
+  if (lines.length === 0) return null;
+
+  const lineHeight = Math.round(fontSizePx * 1.08);
+  const bottomPadding = Math.max(18, Math.round(height * 0.055));
+  const textBlockHeight = lines.length * lineHeight;
+  const firstBaseline = height - bottomPadding - textBlockHeight + fontSizePx;
+
+  lines.forEach((line, index) => {
+    const y = firstBaseline + (index * lineHeight);
+    context.strokeText(line, width / 2, y, maxTextWidth);
+    context.fillText(line, width / 2, y, maxTextWidth);
+  });
+
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((nextBlob) => resolve(nextBlob), 'image/png');
+  });
+  if (!blob) return null;
+
+  return new Uint8Array(await blob.arrayBuffer());
 }
 
 export function useFFmpeg() {
@@ -176,6 +257,9 @@ export function useFFmpeg() {
         loopCount,
         targetSizeMode,
         targetSizeMb,
+        overlayTextEnabled,
+        overlayText,
+        overlayTextSizePx,
         previewFrameCount,
         videoWidth,
         videoHeight,
@@ -185,6 +269,7 @@ export function useFFmpeg() {
 
       const ffmpeg = ffmpegRef.current;
       let inputName: string | null = null;
+      let overlayName: string | null = null;
       let paletteName: string | null = null;
       let outputName: string | null = null;
 
@@ -198,9 +283,11 @@ export function useFFmpeg() {
 
         const timestamp = Date.now();
         inputName = `input-${timestamp}-${file.name}`;
+        overlayName = `overlay-${timestamp}.png`;
         paletteName = `palette-${timestamp}.png`;
         outputName = `output-${timestamp}.gif`;
         const inputFile = inputName;
+        const overlayFile = overlayName;
         const paletteFile = paletteName;
         const outputFile = outputName;
 
@@ -212,6 +299,11 @@ export function useFFmpeg() {
         ];
         const targetBytes = Math.max(1, targetSizeMb) * 1024 * 1024;
         const speedFilter = speed === 1 ? '' : `,setpts=PTS/${speed}`;
+        const overlayEnabled = Boolean(overlayTextEnabled && overlayText?.trim());
+        const safeOverlayText = overlayText?.trim() ?? '';
+        const safeOverlayTextSizePx = Number.isFinite(overlayTextSizePx)
+          ? Math.max(18, Math.min(72, Math.round(overlayTextSizePx ?? 32)))
+          : 32;
         const safePreviewFrameCount =
           Number.isFinite(previewFrameCount) && previewFrameCount !== undefined
             ? Math.max(2, Math.min(24, Math.floor(previewFrameCount)))
@@ -240,19 +332,37 @@ export function useFFmpeg() {
           if (cancelRequestedRef.current) throw new Error('Render canceled');
 
           const videoFilter = `fps=${attemptFps},scale=${attemptWidth}:-1:flags=lanczos${speedFilter}`;
+          const attemptHeight = estimateHeightForWidth(attemptWidth, videoWidth, videoHeight);
+          const overlayBytes = overlayEnabled
+            ? await buildOverlayImage(safeOverlayText, attemptWidth, attemptHeight, safeOverlayTextSizePx)
+            : null;
+          const hasOverlayImage = Boolean(overlayBytes);
+
+          const paletteFilter = hasOverlayImage
+            ? `[0:v]${videoFilter}[base];[base][1:v]overlay=0:0:format=auto,palettegen=max_colors=${attemptColors}:stats_mode=full`
+            : `${videoFilter},palettegen=max_colors=${attemptColors}:stats_mode=full`;
+
+          const renderFilter = hasOverlayImage
+            ? `[0:v]${videoFilter}[base];[base][1:v]overlay=0:0:format=auto[x];[x][2:v]paletteuse=dither=${dither}:diff_mode=rectangle`
+            : `${videoFilter}[x];[x][1:v]paletteuse=dither=${dither}:diff_mode=rectangle`;
 
           setStage('palette');
           setStatus(`${attemptLabel} - building palette...`);
+          await ffmpeg.deleteFile(overlayFile).catch(() => {});
           await ffmpeg.deleteFile(paletteFile).catch(() => {});
           await ffmpeg.deleteFile(outputFile).catch(() => {});
+          if (hasOverlayImage) {
+            await ffmpeg.writeFile(overlayFile, overlayBytes as Uint8Array);
+          }
           await ffmpeg.exec([
             '-y',
-            '-i', inputFile,
+            '-i',
+            inputFile,
             ...trimArgs,
+            ...(hasOverlayImage ? ['-i', overlayFile] : []),
             '-frames:v',
             '1',
-            '-vf',
-            `${videoFilter},palettegen=max_colors=${attemptColors}:stats_mode=full`,
+            ...(hasOverlayImage ? ['-filter_complex', paletteFilter] : ['-vf', paletteFilter]),
             paletteFile,
           ]);
 
@@ -262,12 +372,13 @@ export function useFFmpeg() {
           setStatus(`${attemptLabel} - rendering frames...`);
           await ffmpeg.exec([
             '-y',
-            '-i', inputFile,
+            '-i',
+            inputFile,
             ...trimArgs,
+            ...(hasOverlayImage ? ['-i', overlayFile] : []),
             '-i',
             paletteFile,
-            '-lavfi',
-            `${videoFilter}[x];[x][1:v]paletteuse=dither=${dither}:diff_mode=rectangle`,
+            ...(hasOverlayImage ? ['-filter_complex', renderFilter] : ['-lavfi', renderFilter]),
             ...(safePreviewFrameCount ? ['-frames:v', String(safePreviewFrameCount)] : []),
             '-loop',
             String(loopCount),
@@ -397,6 +508,7 @@ export function useFFmpeg() {
         return null;
       } finally {
         if (inputName) await ffmpeg.deleteFile(inputName).catch(() => {});
+        if (overlayName) await ffmpeg.deleteFile(overlayName).catch(() => {});
         if (paletteName) await ffmpeg.deleteFile(paletteName).catch(() => {});
         if (outputName) await ffmpeg.deleteFile(outputName).catch(() => {});
         setGenerating(false);

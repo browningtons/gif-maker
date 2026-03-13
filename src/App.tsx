@@ -23,8 +23,12 @@ function getDefaultGifName(file: File | null): string {
 function App() {
   const settings = useSettings();
   const [file, setFile] = useState<File | null>(null);
+  const [overlayTextEnabled, setOverlayTextEnabled] = useState(false);
+  const [overlayText, setOverlayText] = useState('');
+  const [overlayTextSizePx, setOverlayTextSizePx] = useState(32);
   const [timeToFirstGifMs, setTimeToFirstGifMs] = useState<number | null>(null);
   const firstRenderStartRef = useRef<number | null>(null);
+  const overlayInitializedRef = useRef(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const lastGifUrlRef = useRef<string | null>(null);
 
@@ -87,6 +91,14 @@ function App() {
     setGifName(getDefaultGifName(file));
   }, [file]);
 
+  useEffect(() => {
+    if (!overlayInitializedRef.current) {
+      overlayInitializedRef.current = true;
+      return;
+    }
+    ffmpeg.clearGifPreview();
+  }, [ffmpeg.clearGifPreview, overlayText, overlayTextEnabled, overlayTextSizePx]);
+
   const effectiveDuration = useMemo(
     () => Math.max(MIN_TRIM_DURATION, settings.durationSec) / Math.max(SPEED_MIN, settings.speed),
     [settings.durationSec, settings.speed]
@@ -133,13 +145,16 @@ function App() {
       loopCount: settings.loopCount,
       targetSizeMode: settings.targetSizeMode,
       targetSizeMb: settings.targetSizeMb,
+      overlayTextEnabled,
+      overlayText,
+      overlayTextSizePx,
       videoWidth: videoMeta.width,
       videoHeight: videoMeta.height,
     });
     if (result && timeToFirstGifMs === null && firstRenderStartRef.current !== null) {
       setTimeToFirstGifMs(Math.round(performance.now() - firstRenderStartRef.current));
     }
-  }, [file, settings.fps, settings.width, settings.colors, settings.dither,
+  }, [file, overlayText, overlayTextEnabled, overlayTextSizePx, settings.fps, settings.width, settings.colors, settings.dither,
       settings.speed, settings.startSec, settings.durationSec, settings.loopCount,
       settings.targetSizeMode, settings.targetSizeMb,
       videoMeta.width, videoMeta.height,
@@ -165,6 +180,9 @@ function App() {
       loopCount: settings.loopCount,
       targetSizeMode: false,
       targetSizeMb: settings.targetSizeMb,
+      overlayTextEnabled,
+      overlayText,
+      overlayTextSizePx,
       previewFrameCount: 6,
       videoWidth: videoMeta.width,
       videoHeight: videoMeta.height,
@@ -173,7 +191,7 @@ function App() {
       setTimeToFirstGifMs(Math.round(performance.now() - firstRenderStartRef.current));
     }
   }, [
-    file, settings.fps, settings.width, settings.colors, settings.dither, settings.speed,
+    file, overlayText, overlayTextEnabled, overlayTextSizePx, settings.fps, settings.width, settings.colors, settings.dither, settings.speed,
     settings.startSec, settings.durationSec, settings.loopCount, settings.targetSizeMb,
     videoMeta.width, videoMeta.height, ffmpeg.generateGif, ffmpeg.setStatus, timeToFirstGifMs,
   ]);
@@ -285,6 +303,12 @@ function App() {
             sourcePreviewUrl={videoMeta.thumbnailUrl}
             gifName={gifName}
             onGifNameChange={setGifName}
+            overlayTextEnabled={overlayTextEnabled}
+            overlayText={overlayText}
+            overlayTextSizePx={overlayTextSizePx}
+            onOverlayTextEnabledChange={setOverlayTextEnabled}
+            onOverlayTextChange={setOverlayText}
+            onOverlayTextSizePxChange={setOverlayTextSizePx}
           />
         </section>
       </div>

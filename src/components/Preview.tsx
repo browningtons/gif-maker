@@ -5,13 +5,31 @@ type PreviewProps = {
   sourcePreviewUrl: string | null;
   gifName: string;
   onGifNameChange: (name: string) => void;
+  overlayTextEnabled: boolean;
+  overlayText: string;
+  overlayTextSizePx: number;
+  onOverlayTextEnabledChange: (enabled: boolean) => void;
+  onOverlayTextChange: (text: string) => void;
+  onOverlayTextSizePxChange: (sizePx: number) => void;
 };
 
-export function Preview({ gifUrl, sourcePreviewUrl, gifName, onGifNameChange }: PreviewProps) {
+export function Preview({
+  gifUrl,
+  sourcePreviewUrl,
+  gifName,
+  onGifNameChange,
+  overlayTextEnabled,
+  overlayText,
+  overlayTextSizePx,
+  onOverlayTextEnabledChange,
+  onOverlayTextChange,
+  onOverlayTextSizePxChange,
+}: PreviewProps) {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   const previewUrl = gifUrl ?? sourcePreviewUrl;
   const hasPreview = Boolean(previewUrl);
+  const showOverlayPreview = Boolean(!gifUrl && sourcePreviewUrl && overlayTextEnabled && overlayText.trim());
 
   const handleCopyToClipboard = useCallback(async (silent = false) => {
     if (!gifUrl) return;
@@ -78,11 +96,27 @@ export function Preview({ gifUrl, sourcePreviewUrl, gifName, onGifNameChange }: 
       </p>
       <div className="mt-4 flex min-h-80 items-center justify-center rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3">
         {hasPreview ? (
-          <img
-            src={previewUrl ?? undefined}
-            alt={gifUrl ? 'Generated GIF' : 'Source preview frame'}
-            className="max-h-[420px] w-full rounded-lg object-contain"
-          />
+          <div className="relative w-full">
+            <img
+              src={previewUrl ?? undefined}
+              alt={gifUrl ? 'Generated GIF' : 'Source preview frame'}
+              className="max-h-[420px] w-full rounded-lg object-contain"
+            />
+            {showOverlayPreview && (
+              <div className="pointer-events-none absolute inset-x-[6%] bottom-[5.5%]">
+                <div
+                  className="text-center font-black uppercase tracking-tight text-white [text-shadow:0_2px_0_rgba(0,0,0,0.95),0_-2px_0_rgba(0,0,0,0.95),2px_0_0_rgba(0,0,0,0.95),-2px_0_0_rgba(0,0,0,0.95),2px_2px_0_rgba(0,0,0,0.95),-2px_2px_0_rgba(0,0,0,0.95)]"
+                  style={{
+                    fontFamily: 'Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif',
+                    fontSize: `${overlayTextSizePx}px`,
+                    lineHeight: 1.05,
+                  }}
+                >
+                  {overlayText}
+                </div>
+              </div>
+            )}
+          </div>
         ) : (
           <span className="text-sm text-[var(--text-muted)]">No GIF yet</span>
         )}
@@ -90,10 +124,47 @@ export function Preview({ gifUrl, sourcePreviewUrl, gifName, onGifNameChange }: 
 
       <div className="mt-4 rounded-xl border border-[var(--color-border)] bg-[var(--surface-2)] p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-[var(--secondary)]">Meme maker</h3>
-          <span className="rounded-xl border border-[var(--color-border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--text-muted)]">
-            Disabled
-          </span>
+          <h3 className="text-sm font-semibold text-[var(--secondary)]">Text overlay</h3>
+          <button
+            type="button"
+            onClick={() => onOverlayTextEnabledChange(!overlayTextEnabled)}
+            className={`rounded-xl border px-3 py-1.5 text-xs font-semibold ${
+              overlayTextEnabled
+                ? 'border-[var(--teal-700)] bg-[var(--teal-50)] text-[var(--teal-700)]'
+                : 'border-[var(--color-border)] bg-[var(--surface)] text-[var(--text-muted)]'
+            }`}
+          >
+            {overlayTextEnabled ? 'On' : 'Off'}
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-[var(--text-muted)]">
+          Beta test: bottom-center caption only. This pass is focused on export stability.
+        </p>
+        <div className="mt-3 space-y-3">
+          <label className="block text-sm">
+            <span className="mb-1 block text-xs font-medium text-[var(--secondary)]">Caption</span>
+            <textarea
+              value={overlayText}
+              onChange={(event) => onOverlayTextChange(event.target.value)}
+              rows={3}
+              placeholder="Add a short caption to test text overlay."
+              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-2 text-sm text-[var(--text)]"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-xs font-medium text-[var(--secondary)]">
+              Text size ({overlayTextSizePx}px)
+            </span>
+            <input
+              type="range"
+              min={18}
+              max={72}
+              step={1}
+              value={overlayTextSizePx}
+              onChange={(event) => onOverlayTextSizePxChange(Number(event.target.value))}
+              className="w-full accent-[var(--link)]"
+            />
+          </label>
         </div>
       </div>
 
