@@ -1,15 +1,6 @@
 export type PresetKey = 'ultra' | 'balanced' | 'compact';
 export type PlatformKey = 'linkedin' | 'x' | 'instagram' | 'facebook' | 'tiktok' | 'custom';
 export type DitherKey = 'none' | 'bayer' | 'floyd_steinberg' | 'sierra2' | 'sierra2_4a';
-export type OverlayFontKey =
-  | 'meme'
-  | 'sans'
-  | 'serif'
-  | 'mono'
-  | 'display'
-  | 'rounded'
-  | 'comic'
-  | 'elegant';
 
 export type Settings = {
   fps: number;
@@ -117,12 +108,6 @@ export const SPEED_MAX = 4;
 export const TARGET_SIZE_MIN = 1;
 export const TARGET_SIZE_MAX = 100;
 export const LOOP_MAX = 1000;
-export const OVERLAY_TEXT_SIZE_MIN = 16;
-export const OVERLAY_TEXT_SIZE_MAX = 120;
-export const OVERLAY_BOX_WIDTH_MIN = 0.2;
-export const OVERLAY_BOX_WIDTH_MAX = 1;
-export const OVERLAY_BOX_HEIGHT_MIN = 28;
-export const OVERLAY_BOX_HEIGHT_MAX = 360;
 
 // Target size optimization limits
 export const TARGET_MAX_ATTEMPTS = 8;
@@ -139,49 +124,3 @@ export const FFMPEG_RETRY_DELAY_MS = 2000;
 export const LARGE_FILE_WARNING_BYTES = 100 * 1024 * 1024;
 
 export const DEFAULT_PRESET: PresetKey = 'balanced';
-
-export const OVERLAY_FONT_PROFILES: Record<
-  OverlayFontKey,
-  { label: string; cssFamily: string; ffmpegFamily?: string }
-> = {
-  meme: {
-    label: 'Meme bold',
-    cssFamily: 'Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif',
-    ffmpegFamily: 'Sans',
-  },
-  sans: {
-    label: 'Clean sans',
-    cssFamily: '"Trebuchet MS", "Segoe UI", sans-serif',
-    ffmpegFamily: 'Sans',
-  },
-  serif: {
-    label: 'Classic serif',
-    cssFamily: 'Georgia, "Times New Roman", serif',
-    ffmpegFamily: 'Serif',
-  },
-  mono: {
-    label: 'Code mono',
-    cssFamily: '"Courier New", monospace',
-    ffmpegFamily: 'Monospace',
-  },
-  display: {
-    label: 'Display black',
-    cssFamily: '"Arial Black", "Segoe UI", sans-serif',
-    ffmpegFamily: 'Sans',
-  },
-  rounded: {
-    label: 'Rounded',
-    cssFamily: '"Arial Rounded MT Bold", "Trebuchet MS", sans-serif',
-    ffmpegFamily: 'Sans',
-  },
-  comic: {
-    label: 'Comic',
-    cssFamily: '"Comic Sans MS", "Marker Felt", cursive',
-    ffmpegFamily: 'Sans',
-  },
-  elegant: {
-    label: 'Elegant serif',
-    cssFamily: '"Palatino Linotype", Palatino, serif',
-    ffmpegFamily: 'Serif',
-  },
-};
