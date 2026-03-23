@@ -3,6 +3,8 @@ import {
   type PresetKey,
   type PlatformKey,
   type DitherKey,
+  type PlaybackMode,
+  type FilterKey,
   type PersistedSettings,
   PRESETS,
   PLATFORM_PROFILES,
@@ -64,6 +66,8 @@ export function useSettings() {
     )
   );
   const [targetSizeMode, setTargetSizeMode] = useState(persisted.targetSizeMode ?? true);
+  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>(persisted.playbackMode ?? 'normal');
+  const [filter, setFilter] = useState<FilterKey>(persisted.filter ?? 'none');
 
   // Persist settings to localStorage
   useEffect(() => {
@@ -87,11 +91,13 @@ export function useSettings() {
         PLATFORM_PROFILES.linkedin.targetMb
       ),
       targetSizeMode,
+      playbackMode,
+      filter,
     };
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(snapshot));
   }, [
-    colors, dither, durationSec, fps, isDark, loopCount,
-    platform, preset, speed, startSec, targetSizeMb, targetSizeMode, width,
+    colors, dither, durationSec, filter, fps, isDark, loopCount,
+    playbackMode, platform, preset, speed, startSec, targetSizeMb, targetSizeMode, width,
   ]);
 
   // Sync platform selection to target size
@@ -123,6 +129,8 @@ export function useSettings() {
     setPlatform('linkedin');
     setTargetSizeMb(PLATFORM_PROFILES.linkedin.targetMb);
     setTargetSizeMode(true);
+    setPlaybackMode('normal');
+    setFilter('none');
   };
 
   const clampTrim = (nextStart: number, nextDuration: number, videoDuration: number) => {
@@ -153,6 +161,8 @@ export function useSettings() {
     platform, setPlatform,
     targetSizeMb, setTargetSizeMb,
     targetSizeMode, setTargetSizeMode,
+    playbackMode, setPlaybackMode,
+    filter, setFilter,
     restoreDefaults,
     clampTrim,
   };

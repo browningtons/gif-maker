@@ -97,11 +97,12 @@ function App() {
       return;
     }
     ffmpeg.clearGifPreview();
-  }, [ffmpeg.clearGifPreview, overlayText, overlayTextEnabled, overlayTextSizePx]);
+  }, [ffmpeg.clearGifPreview, overlayText, overlayTextEnabled, overlayTextSizePx, settings.playbackMode, settings.filter]);
 
+  const boomerangMultiplier = settings.playbackMode === 'boomerang' ? 2 : 1;
   const effectiveDuration = useMemo(
-    () => Math.max(MIN_TRIM_DURATION, settings.durationSec) / Math.max(SPEED_MIN, settings.speed),
-    [settings.durationSec, settings.speed]
+    () => (Math.max(MIN_TRIM_DURATION, settings.durationSec) / Math.max(SPEED_MIN, settings.speed)) * boomerangMultiplier,
+    [settings.durationSec, settings.speed, boomerangMultiplier]
   );
 
   const outputHeight = useMemo(
@@ -145,6 +146,8 @@ function App() {
       loopCount: settings.loopCount,
       targetSizeMode: settings.targetSizeMode,
       targetSizeMb: settings.targetSizeMb,
+      playbackMode: settings.playbackMode,
+      filter: settings.filter,
       overlayTextEnabled,
       overlayText,
       overlayTextSizePx,
@@ -156,7 +159,7 @@ function App() {
     }
   }, [file, overlayText, overlayTextEnabled, overlayTextSizePx, settings.fps, settings.width, settings.colors, settings.dither,
       settings.speed, settings.startSec, settings.durationSec, settings.loopCount,
-      settings.targetSizeMode, settings.targetSizeMb,
+      settings.targetSizeMode, settings.targetSizeMb, settings.playbackMode, settings.filter,
       videoMeta.width, videoMeta.height,
       ffmpeg.generateGif, ffmpeg.setStatus, timeToFirstGifMs]);
 
@@ -180,6 +183,8 @@ function App() {
       loopCount: settings.loopCount,
       targetSizeMode: false,
       targetSizeMb: settings.targetSizeMb,
+      playbackMode: settings.playbackMode,
+      filter: settings.filter,
       overlayTextEnabled,
       overlayText,
       overlayTextSizePx,
@@ -192,7 +197,7 @@ function App() {
     }
   }, [
     file, overlayText, overlayTextEnabled, overlayTextSizePx, settings.fps, settings.width, settings.colors, settings.dither, settings.speed,
-    settings.startSec, settings.durationSec, settings.loopCount, settings.targetSizeMb,
+    settings.startSec, settings.durationSec, settings.loopCount, settings.targetSizeMb, settings.playbackMode, settings.filter,
     videoMeta.width, videoMeta.height, ffmpeg.generateGif, ffmpeg.setStatus, timeToFirstGifMs,
   ]);
 
@@ -263,6 +268,8 @@ function App() {
                 platform={settings.platform}
                 targetSizeMb={settings.targetSizeMb}
                 targetSizeMode={settings.targetSizeMode}
+                playbackMode={settings.playbackMode}
+                filter={settings.filter}
                 videoDuration={videoMeta.duration}
                 onPresetChange={settings.applyPreset}
                 onFpsChange={settings.setFps}
@@ -275,6 +282,8 @@ function App() {
                 onPlatformChange={settings.setPlatform}
                 onTargetSizeMbChange={settings.setTargetSizeMb}
                 onTargetSizeModeToggle={() => settings.setTargetSizeMode((c) => !c)}
+                onPlaybackModeChange={settings.setPlaybackMode}
+                onFilterChange={settings.setFilter}
                 onRestoreDefaults={settings.restoreDefaults}
               />
 

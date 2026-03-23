@@ -1,6 +1,8 @@
 export type PresetKey = 'ultra' | 'balanced' | 'compact';
 export type PlatformKey = 'linkedin' | 'x' | 'instagram' | 'facebook' | 'tiktok' | 'custom';
 export type DitherKey = 'none' | 'bayer' | 'floyd_steinberg' | 'sierra2' | 'sierra2_4a';
+export type PlaybackMode = 'normal' | 'boomerang';
+export type FilterKey = 'none' | 'grayscale' | 'sepia' | 'contrast' | 'blur' | 'vignette' | 'pixelate';
 
 export type Settings = {
   fps: number;
@@ -23,6 +25,8 @@ export type PersistedSettings = {
   platform: PlatformKey;
   targetSizeMb: number;
   targetSizeMode: boolean;
+  playbackMode: PlaybackMode;
+  filter: FilterKey;
 };
 
 export type VideoMeta = {

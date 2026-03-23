@@ -3,6 +3,8 @@ import {
   type PresetKey,
   type PlatformKey,
   type DitherKey,
+  type PlaybackMode,
+  type FilterKey,
   PRESETS,
   PLATFORM_PROFILES,
   FPS_MIN,
@@ -35,6 +37,8 @@ type ControlsProps = {
   platform: PlatformKey;
   targetSizeMb: number;
   targetSizeMode: boolean;
+  playbackMode: PlaybackMode;
+  filter: FilterKey;
   videoDuration: number;
   onPresetChange: (key: PresetKey) => void;
   onFpsChange: (v: number) => void;
@@ -47,6 +51,8 @@ type ControlsProps = {
   onPlatformChange: (v: PlatformKey) => void;
   onTargetSizeMbChange: (v: number) => void;
   onTargetSizeModeToggle: () => void;
+  onPlaybackModeChange: (v: PlaybackMode) => void;
+  onFilterChange: (v: FilterKey) => void;
   onRestoreDefaults: () => void;
 };
 
@@ -66,11 +72,11 @@ export function Controls(props: ControlsProps) {
   const {
     preset, fps, width, colors, dither, speed,
     startSec, durationSec, loopCount, platform,
-    targetSizeMb, targetSizeMode, videoDuration,
+    targetSizeMb, targetSizeMode, playbackMode, filter, videoDuration,
     onPresetChange, onFpsChange, onWidthChange, onColorsChange,
     onDitherChange, onSpeedChange, onTrimChange, onLoopCountChange,
     onPlatformChange, onTargetSizeMbChange, onTargetSizeModeToggle,
-    onRestoreDefaults,
+    onPlaybackModeChange, onFilterChange, onRestoreDefaults,
   } = props;
 
   return (
@@ -159,6 +165,43 @@ export function Controls(props: ControlsProps) {
             <option value="compact">Compact</option>
           </select>
         </label>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-[var(--secondary)]">Playback</span>
+            <select
+              value={playbackMode}
+              onChange={(e) => onPlaybackModeChange(e.target.value as PlaybackMode)}
+              className={fieldClass}
+            >
+              <option value="normal">Normal</option>
+              <option value="boomerang">Boomerang (ping-pong)</option>
+            </select>
+          </label>
+
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-[var(--secondary)]">Filter</span>
+            <select
+              value={filter}
+              onChange={(e) => onFilterChange(e.target.value as FilterKey)}
+              className={fieldClass}
+            >
+              <option value="none">None</option>
+              <option value="grayscale">Grayscale</option>
+              <option value="sepia">Sepia</option>
+              <option value="contrast">Contrast boost</option>
+              <option value="blur">Blur</option>
+              <option value="vignette">Vignette</option>
+              <option value="pixelate">Pixelate</option>
+            </select>
+          </label>
+        </div>
+
+        {playbackMode === 'boomerang' && (
+          <p className="text-xs text-[var(--text-muted)]">
+            Boomerang plays forward then backward, doubling the clip length. Keep clips short to avoid memory issues.
+          </p>
+        )}
 
         <p className="text-xs text-[var(--text-muted)]">
           {targetSizeMode

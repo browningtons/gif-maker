@@ -3,6 +3,8 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import {
   type DitherKey,
+  type FilterKey,
+  type PlaybackMode,
   FFMPEG_CORE_BASE,
   FFMPEG_MAX_RETRIES,
   FFMPEG_RETRY_DELAY_MS,
@@ -29,6 +31,8 @@ type RenderParams = {
   loopCount: number;
   targetSizeMode: boolean;
   targetSizeMb: number;
+  playbackMode?: PlaybackMode;
+  filter?: FilterKey;
   overlayTextEnabled?: boolean;
   overlayText?: string;
   overlayTextSizePx?: number;
@@ -140,6 +144,18 @@ async function buildOverlayImage(
   if (!blob) return null;
 
   return new Uint8Array(await blob.arrayBuffer());
+}
+
+function getFilterSegment(filter: FilterKey): string {
+  switch (filter) {
+    case 'grayscale': return ',format=gray';
+    case 'sepia': return ',colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131:0';
+    case 'contrast': return ',eq=contrast=1.4:brightness=0.02';
+    case 'blur': return ',boxblur=2:1';
+    case 'vignette': return ',vignette=PI/4';
+    case 'pixelate': return ',scale=iw/8:ih/8:flags=neighbor,scale=iw*8:ih*8:flags=neighbor';
+    default: return '';
+  }
 }
 
 export function useFFmpeg() {
@@ -257,6 +273,8 @@ export function useFFmpeg() {
         loopCount,
         targetSizeMode,
         targetSizeMb,
+        playbackMode,
+        filter,
         overlayTextEnabled,
         overlayText,
         overlayTextSizePx,
@@ -331,20 +349,32 @@ export function useFFmpeg() {
         ): Promise<Blob> => {
           if (cancelRequestedRef.current) throw new Error('Render canceled');
 
-          const videoFilter = `fps=${attemptFps},scale=${attemptWidth}:-1:flags=lanczos${speedFilter}`;
+          const baseFilter = `fps=${attemptFps},scale=${attemptWidth}:-1:flags=lanczos${speedFilter}${getFilterSegment(filter ?? 'none')}`;
+          const useBoomerang = playbackMode === 'boomerang';
           const attemptHeight = estimateHeightForWidth(attemptWidth, videoWidth, videoHeight);
           const overlayBytes = overlayEnabled
             ? await buildOverlayImage(safeOverlayText, attemptWidth, attemptHeight, safeOverlayTextSizePx)
             : null;
           const hasOverlayImage = Boolean(overlayBytes);
 
-          const paletteFilter = hasOverlayImage
-            ? `[0:v]${videoFilter}[base];[base][1:v]overlay=0:0:format=auto,palettegen=max_colors=${attemptColors}:stats_mode=full`
-            : `${videoFilter},palettegen=max_colors=${attemptColors}:stats_mode=full`;
+          // Build filter chains for the 4 combinations of boomerang x overlay
+          let paletteFilter: string;
+          let renderFilter: string;
+          const useFilterComplex = useBoomerang || hasOverlayImage;
 
-          const renderFilter = hasOverlayImage
-            ? `[0:v]${videoFilter}[base];[base][1:v]overlay=0:0:format=auto[x];[x][2:v]paletteuse=dither=${dither}:diff_mode=rectangle`
-            : `${videoFilter}[x];[x][1:v]paletteuse=dither=${dither}:diff_mode=rectangle`;
+          if (useBoomerang && hasOverlayImage) {
+            paletteFilter = `[0:v]${baseFilter},split[fwd][rev];[rev]reverse[bwd];[fwd][bwd]concat=n=2:v=1:a=0[base];[base][1:v]overlay=0:0:format=auto,palettegen=max_colors=${attemptColors}:stats_mode=full`;
+            renderFilter = `[0:v]${baseFilter},split[fwd][rev];[rev]reverse[bwd];[fwd][bwd]concat=n=2:v=1:a=0[base];[base][1:v]overlay=0:0:format=auto[x];[x][2:v]paletteuse=dither=${dither}:diff_mode=rectangle`;
+          } else if (useBoomerang) {
+            paletteFilter = `[0:v]${baseFilter},split[fwd][rev];[rev]reverse[bwd];[fwd][bwd]concat=n=2:v=1:a=0,palettegen=max_colors=${attemptColors}:stats_mode=full`;
+            renderFilter = `[0:v]${baseFilter},split[fwd][rev];[rev]reverse[bwd];[fwd][bwd]concat=n=2:v=1:a=0[x];[x][1:v]paletteuse=dither=${dither}:diff_mode=rectangle`;
+          } else if (hasOverlayImage) {
+            paletteFilter = `[0:v]${baseFilter}[base];[base][1:v]overlay=0:0:format=auto,palettegen=max_colors=${attemptColors}:stats_mode=full`;
+            renderFilter = `[0:v]${baseFilter}[base];[base][1:v]overlay=0:0:format=auto[x];[x][2:v]paletteuse=dither=${dither}:diff_mode=rectangle`;
+          } else {
+            paletteFilter = `${baseFilter},palettegen=max_colors=${attemptColors}:stats_mode=full`;
+            renderFilter = `${baseFilter}[x];[x][1:v]paletteuse=dither=${dither}:diff_mode=rectangle`;
+          }
 
           setStage('palette');
           setStatus(`${attemptLabel} - building palette...`);
@@ -362,7 +392,7 @@ export function useFFmpeg() {
             ...(hasOverlayImage ? ['-i', overlayFile] : []),
             '-frames:v',
             '1',
-            ...(hasOverlayImage ? ['-filter_complex', paletteFilter] : ['-vf', paletteFilter]),
+            ...(useFilterComplex ? ['-filter_complex', paletteFilter] : ['-vf', paletteFilter]),
             paletteFile,
           ]);
 
@@ -378,7 +408,7 @@ export function useFFmpeg() {
             ...(hasOverlayImage ? ['-i', overlayFile] : []),
             '-i',
             paletteFile,
-            ...(hasOverlayImage ? ['-filter_complex', renderFilter] : ['-lavfi', renderFilter]),
+            ...(useFilterComplex ? ['-filter_complex', renderFilter] : ['-lavfi', renderFilter]),
             ...(safePreviewFrameCount ? ['-frames:v', String(safePreviewFrameCount)] : []),
             '-loop',
             String(loopCount),

@@ -1,6 +1,8 @@
 import {
   type DitherKey,
+  type FilterKey,
   type PersistedSettings,
+  type PlaybackMode,
   type PresetKey,
   type PlatformKey,
   DITHER_FACTORS,
@@ -35,6 +37,22 @@ export function isDitherKey(value: unknown): value is DitherKey {
   );
 }
 
+export function isPlaybackMode(value: unknown): value is PlaybackMode {
+  return value === 'normal' || value === 'boomerang';
+}
+
+export function isFilterKey(value: unknown): value is FilterKey {
+  return (
+    value === 'none' ||
+    value === 'grayscale' ||
+    value === 'sepia' ||
+    value === 'contrast' ||
+    value === 'blur' ||
+    value === 'vignette' ||
+    value === 'pixelate'
+  );
+}
+
 export function clamp(value: number, min: number, max: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, value));
@@ -65,6 +83,8 @@ export function readPersistedSettings(): Partial<PersistedSettings> {
         typeof data.targetSizeMb === 'number' ? data.targetSizeMb : undefined,
       targetSizeMode:
         typeof data.targetSizeMode === 'boolean' ? data.targetSizeMode : undefined,
+      playbackMode: isPlaybackMode(data.playbackMode) ? data.playbackMode : undefined,
+      filter: isFilterKey(data.filter) ? data.filter : undefined,
     };
   } catch {
     return {};
